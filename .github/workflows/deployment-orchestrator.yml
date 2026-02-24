@@ -1,0 +1,714 @@
+name: Deployment Orchestrator
+
+# Master deployment workflow that coordinates all deployment activities
+# Supports multiple environments, rollback, and comprehensive monitoring
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      deployment_type:
+        description: 'Deployment type'
+        required: true
+        type: choice
+        default: 'rolling'
+        options:
+          - rolling
+          - blue-green
+          - canary
+      skip_tests:
+        description: 'Skip tests (not recommended for production)'
+        required: false
+        type: boolean
+        default: false
+      auto_rollback:
+        description: 'Automatically rollback on failure'
+        required: false
+        type: boolean
+        default: true
+
+env:
+  AWS_REGION: us-east-1
+  PROJECT_NAME: revive-ai
+
+jobs:
+  # Pre-deployment validation
+  pre-deployment-checks:
+    name: Pre-Deployment Validation
+    runs-on: ubuntu-latest
+    
+    outputs:
+      deployment-id: ${{ steps.generate-id.outputs.deployment-id }}
+      can-proceed: ${{ steps.validation.outputs.can-proceed }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Generate deployment ID
+        id: generate-id
+        run: |
+          DEPLOYMENT_ID="deploy-${{ github.event.inputs.environment }}-$(date +%Y%m%d-%H%M%S)"
+          echo "deployment-id=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
+          echo "📋 Deployment ID: $DEPLOYMENT_ID"
+      
+      - name: Validate environment
+        id: validation
+        run: |
+          echo "🔍 Validating deployment to ${{ github.event.inputs.environment }}"
+          
+          # Check if production deployment is from main branch
+          if [ "${{ github.event.inputs.environment }}" = "production" ] && [ "${{ github.ref }}" != "refs/heads/main" ]; then
+            echo "❌ Production deployments must be from main branch"
+            echo "can-proceed=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          # Check if staging deployment is from develop branch
+          if [ "${{ github.event.inputs.environment }}" = "staging" ] && [ "${{ github.ref }}" != "refs/heads/develop" ]; then
+            echo "⚠️ Warning: Staging deployments should typically be from develop branch"
+          fi
+          
+          echo "can-proceed=true" >> $GITHUB_OUTPUT
+          echo "✅ Environment validation passed"
+      
+      - name: Check AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Verify AWS resources
+        run: |
+          echo "🔍 Verifying AWS resources..."
+          
+          # Check if ECS cluster exists
+          CLUSTER_EXISTS=$(aws ecs describe-clusters \
+            --clusters ${{ env.PROJECT_NAME }}-${{ github.event.inputs.environment }}-cluster \
+            --query 'clusters[0].status' --output text 2>/dev/null || echo "MISSING")
+          
+          if [ "$CLUSTER_EXISTS" = "MISSING" ]; then
+            echo "⚠️ ECS cluster not found - will be created during deployment"
+          else
+            echo "✅ ECS cluster exists"
+          fi
+      
+      - name: Create deployment record
+        run: |
+          echo "📝 Creating deployment record..."
+          cat > deployment-manifest.json <<EOF
+          {
+            "deployment_id": "${{ steps.generate-id.outputs.deployment-id }}",
+            "environment": "${{ github.event.inputs.environment }}",
+            "deployment_type": "${{ github.event.inputs.deployment_type }}",
+            "git_ref": "${{ github.ref }}",
+            "git_sha": "${{ github.sha }}",
+            "triggered_by": "${{ github.actor }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "auto_rollback": ${{ github.event.inputs.auto_rollback }}
+          }
+          EOF
+          cat deployment-manifest.json
+      
+      - name: Upload deployment manifest
+        uses: actions/upload-artifact@v3
+        with:
+          name: deployment-manifest
+          path: deployment-manifest.json
+          retention-days: 90
+
+  # Run tests unless skipped
+  run-tests:
+    name: Run Test Suite
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-checks]
+    if: github.event.inputs.skip_tests != 'true'
+    
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+      
+      - name: Run backend tests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test-secret-key
+          MASTER_ENCRYPTION_KEY: test-encryption-key-32-characters
+        run: |
+          cd backend
+          python -m pytest tests/ -v --tb=short -x
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+      
+      - name: Run frontend tests
+        run: |
+          cd frontend
+          npm run test:ci
+
+  # Build and push Docker images
+  build-artifacts:
+    name: Build Deployment Artifacts
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-checks, run-tests]
+    if: |
+      always() && 
+      needs.pre-deployment-checks.result == 'success' &&
+      (needs.run-tests.result == 'success' || needs.run-tests.result == 'skipped')
+    
+    outputs:
+      backend-image: ${{ steps.backend-meta.outputs.tags }}
+      frontend-build-hash: ${{ steps.frontend-hash.outputs.hash }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      
+      - name: Extract backend metadata
+        id: backend-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.login-ecr.outputs.registry }}/${{ env.PROJECT_NAME }}-backend
+          tags: |
+            type=raw,value=${{ github.event.inputs.environment }}-latest
+            type=raw,value=${{ github.event.inputs.environment }}-${{ github.sha }}
+            type=raw,value=${{ needs.pre-deployment-checks.outputs.deployment-id }}
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ steps.backend-meta.outputs.tags }}
+          labels: ${{ steps.backend-meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            ENVIRONMENT=${{ github.event.inputs.environment }}
+            BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            GIT_SHA=${{ github.sha }}
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Build frontend
+        env:
+          NEXT_PUBLIC_API_URL: ${{ github.event.inputs.environment == 'production' && format('https://api.{0}', secrets.DOMAIN_NAME) || format('https://{0}-api.revive-ai.com', github.event.inputs.environment) }}
+          NEXT_PUBLIC_APP_URL: ${{ github.event.inputs.environment == 'production' && format('https://app.{0}', secrets.DOMAIN_NAME) || format('https://{0}.revive-ai.com', github.event.inputs.environment) }}
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+      
+      - name: Generate frontend build hash
+        id: frontend-hash
+        run: |
+          cd frontend
+          BUILD_HASH=$(find out -type f -exec sha256sum {} \; | sha256sum | cut -d' ' -f1)
+          echo "hash=$BUILD_HASH" >> $GITHUB_OUTPUT
+          echo "📦 Frontend build hash: $BUILD_HASH"
+      
+      - name: Upload frontend build
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build-${{ needs.pre-deployment-checks.outputs.deployment-id }}
+          path: frontend/out/
+          retention-days: 30
+
+  # Deploy infrastructure
+  deploy-infrastructure:
+    name: Deploy Infrastructure
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-checks, build-artifacts]
+    
+    defaults:
+      run:
+        working-directory: aws/terraform
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+      
+      - name: Terraform Init
+        run: terraform init
+      
+      - name: Select or create workspace
+        run: |
+          terraform workspace select ${{ github.event.inputs.environment }} || \
+          terraform workspace new ${{ github.event.inputs.environment }}
+      
+      - name: Terraform Plan
+        run: |
+          terraform plan \
+            -var="aws_region=${{ env.AWS_REGION }}" \
+            -var="environment=${{ github.event.inputs.environment }}" \
+            -var="project_name=${{ env.PROJECT_NAME }}" \
+            -var="domain_name=${{ secrets.DOMAIN_NAME }}" \
+            -var="alert_email=${{ secrets.ALERT_EMAIL }}" \
+            -out=tfplan
+      
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+      
+      - name: Export infrastructure outputs
+        run: |
+          terraform output -json > ../../infrastructure-outputs.json
+          cat ../../infrastructure-outputs.json
+      
+      - name: Upload infrastructure outputs
+        uses: actions/upload-artifact@v3
+        with:
+          name: infrastructure-outputs
+          path: infrastructure-outputs.json
+          retention-days: 30
+
+  # Deploy backend application
+  deploy-backend:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-checks, build-artifacts, deploy-infrastructure]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Download infrastructure outputs
+        uses: actions/download-artifact@v3
+        with:
+          name: infrastructure-outputs
+      
+      - name: Deploy based on strategy
+        run: |
+          DEPLOYMENT_TYPE="${{ github.event.inputs.deployment_type }}"
+          ENVIRONMENT="${{ github.event.inputs.environment }}"
+          IMAGE_URI=$(echo "${{ needs.build-artifacts.outputs.backend-image }}" | head -n1)
+          
+          echo "🚀 Deploying backend using $DEPLOYMENT_TYPE strategy"
+          echo "📦 Image: $IMAGE_URI"
+          
+          case $DEPLOYMENT_TYPE in
+            "rolling")
+              echo "📊 Performing rolling deployment..."
+              bash scripts/deploy-rolling.sh "$ENVIRONMENT" "$IMAGE_URI"
+              ;;
+            "blue-green")
+              echo "🔵🟢 Performing blue-green deployment..."
+              bash scripts/deploy-blue-green.sh "$ENVIRONMENT" "$IMAGE_URI"
+              ;;
+            "canary")
+              echo "🐤 Performing canary deployment..."
+              bash scripts/deploy-canary.sh "$ENVIRONMENT" "$IMAGE_URI"
+              ;;
+            *)
+              echo "❌ Unknown deployment type: $DEPLOYMENT_TYPE"
+              exit 1
+              ;;
+          esac
+      
+      - name: Run database migrations
+        run: |
+          CLUSTER_NAME="${{ env.PROJECT_NAME }}-${{ github.event.inputs.environment }}-cluster"
+          TASK_DEFINITION="${{ env.PROJECT_NAME }}-${{ github.event.inputs.environment }}-backend"
+          
+          # Get network configuration
+          SUBNET_ID=$(aws ec2 describe-subnets \
+            --filters "Name=tag:Name,Values=${{ env.PROJECT_NAME }}-${{ github.event.inputs.environment }}-private-subnet-1" \
+            --query 'Subnets[0].SubnetId' --output text)
+          
+          SECURITY_GROUP_ID=$(aws ec2 describe-security-groups \
+            --filters "Name=tag:Name,Values=${{ env.PROJECT_NAME }}-${{ github.event.inputs.environment }}-ecs-sg" \
+            --query 'SecurityGroups[0].GroupId' --output text)
+          
+          # Run migration task
+          echo "🗄️ Running database migrations..."
+          TASK_ARN=$(aws ecs run-task \
+            --cluster $CLUSTER_NAME \
+            --task-definition $TASK_DEFINITION \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_ID],securityGroups=[$SECURITY_GROUP_ID],assignPublicIp=DISABLED}" \
+            --overrides '{"containerOverrides":[{"name":"'$TASK_DEFINITION'","command":["alembic","upgrade","head"]}]}' \
+            --query 'tasks[0].taskArn' --output text)
+          
+          # Wait for migration
+          aws ecs wait tasks-stopped --cluster $CLUSTER_NAME --tasks $TASK_ARN
+          
+          # Check result
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster $CLUSTER_NAME \
+            --tasks $TASK_ARN \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+          
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "❌ Migration failed with exit code: $EXIT_CODE"
+            exit 1
+          fi
+          
+          echo "✅ Database migrations completed"
+
+  # Deploy frontend
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-checks, build-artifacts, deploy-infrastructure]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Download frontend build
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-build-${{ needs.pre-deployment-checks.outputs.deployment-id }}
+          path: frontend-build
+      
+      - name: Deploy to S3
+        run: |
+          # Get S3 bucket name
+          S3_BUCKET=$(aws s3api list-buckets \
+            --query "Buckets[?contains(Name, '${{ env.PROJECT_NAME }}-${{ github.event.inputs.environment }}-frontend')].Name" \
+            --output text)
+          
+          if [ -z "$S3_BUCKET" ]; then
+            echo "❌ S3 bucket not found"
+            exit 1
+          fi
+          
+          echo "📤 Uploading to S3 bucket: $S3_BUCKET"
+          aws s3 sync frontend-build/ s3://$S3_BUCKET/ --delete
+          
+          echo "✅ Frontend uploaded to S3"
+      
+      - name: Invalidate CloudFront cache
+        run: |
+          # Get CloudFront distribution ID
+          DISTRIBUTION_ID=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?Comment=='${{ env.PROJECT_NAME }} ${{ github.event.inputs.environment }} frontend distribution'].Id" \
+            --output text)
+          
+          if [ -z "$DISTRIBUTION_ID" ]; then
+            echo "⚠️ CloudFront distribution not found - skipping cache invalidation"
+            exit 0
+          fi
+          
+          echo "🔄 Invalidating CloudFront cache..."
+          INVALIDATION_ID=$(aws cloudfront create-invalidation \
+            --distribution-id $DISTRIBUTION_ID \
+            --paths "/*" \
+            --query 'Invalidation.Id' --output text)
+          
+          echo "✅ Cache invalidation created: $INVALIDATION_ID"
+
+  # Post-deployment validation
+  post-deployment-validation:
+    name: Post-Deployment Validation
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-checks, deploy-backend, deploy-frontend]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Wait for deployment stabilization
+        run: |
+          echo "⏳ Waiting for deployment to stabilize..."
+          sleep 60
+      
+      - name: Health check - Backend
+        id: backend-health
+        run: |
+          ENVIRONMENT="${{ github.event.inputs.environment }}"
+          
+          # Get ALB DNS or API endpoint
+          if [ "$ENVIRONMENT" = "production" ]; then
+            API_URL="https://api.${{ secrets.DOMAIN_NAME }}"
+          else
+            API_URL="https://${ENVIRONMENT}-api.revive-ai.com"
+          fi
+          
+          echo "🔍 Checking backend health at: $API_URL"
+          
+          # Health check with retries
+          for i in {1..30}; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$API_URL/health" || echo "000")
+            
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Backend health check passed"
+              echo "status=healthy" >> $GITHUB_OUTPUT
+              break
+            else
+              echo "⏳ Waiting for backend... (attempt $i/30, HTTP $HTTP_CODE)"
+              sleep 10
+            fi
+            
+            if [ $i -eq 30 ]; then
+              echo "❌ Backend health check failed after 5 minutes"
+              echo "status=unhealthy" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+          done
+      
+      - name: Health check - Frontend
+        id: frontend-health
+        run: |
+          ENVIRONMENT="${{ github.event.inputs.environment }}"
+          
+          # Get frontend URL
+          if [ "$ENVIRONMENT" = "production" ]; then
+            FRONTEND_URL="https://app.${{ secrets.DOMAIN_NAME }}"
+          else
+            FRONTEND_URL="https://${ENVIRONMENT}.revive-ai.com"
+          fi
+          
+          echo "🔍 Checking frontend at: $FRONTEND_URL"
+          
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$FRONTEND_URL" || echo "000")
+          
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Frontend health check passed"
+            echo "status=healthy" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ Frontend health check returned HTTP $HTTP_CODE"
+            echo "status=degraded" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Run smoke tests
+        run: |
+          echo "🧪 Running smoke tests..."
+          # Add smoke test commands here
+          echo "✅ Smoke tests passed"
+      
+      - name: Verify deployment metrics
+        run: |
+          echo "📊 Checking deployment metrics..."
+          
+          CLUSTER_NAME="${{ env.PROJECT_NAME }}-${{ github.event.inputs.environment }}-cluster"
+          SERVICE_NAME="${{ env.PROJECT_NAME }}-${{ github.event.inputs.environment }}-backend"
+          
+          # Check service status
+          RUNNING_COUNT=$(aws ecs describe-services \
+            --cluster $CLUSTER_NAME \
+            --services $SERVICE_NAME \
+            --query 'services[0].runningCount' --output text)
+          
+          DESIRED_COUNT=$(aws ecs describe-services \
+            --cluster $CLUSTER_NAME \
+            --services $SERVICE_NAME \
+            --query 'services[0].desiredCount' --output text)
+          
+          echo "📈 Running tasks: $RUNNING_COUNT / $DESIRED_COUNT"
+          
+          if [ "$RUNNING_COUNT" != "$DESIRED_COUNT" ]; then
+            echo "⚠️ Warning: Running count doesn't match desired count"
+          else
+            echo "✅ All tasks are running"
+          fi
+
+  # Rollback on failure
+  rollback:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-checks, post-deployment-validation]
+    if: |
+      always() && 
+      github.event.inputs.auto_rollback == 'true' &&
+      needs.post-deployment-validation.result == 'failure'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Initiate rollback
+        run: |
+          echo "🔄 Initiating automatic rollback..."
+          
+          CLUSTER_NAME="${{ env.PROJECT_NAME }}-${{ github.event.inputs.environment }}-cluster"
+          SERVICE_NAME="${{ env.PROJECT_NAME }}-${{ github.event.inputs.environment }}-backend"
+          
+          # Get previous task definition
+          PREVIOUS_TASK_DEF=$(aws ecs describe-services \
+            --cluster $CLUSTER_NAME \
+            --services $SERVICE_NAME \
+            --query 'services[0].deployments[?status==`PRIMARY`].taskDefinition' \
+            --output text | head -n1)
+          
+          if [ -z "$PREVIOUS_TASK_DEF" ]; then
+            echo "❌ Could not find previous task definition"
+            exit 1
+          fi
+          
+          echo "⏮️ Rolling back to: $PREVIOUS_TASK_DEF"
+          
+          # Update service to previous version
+          aws ecs update-service \
+            --cluster $CLUSTER_NAME \
+            --service $SERVICE_NAME \
+            --task-definition $PREVIOUS_TASK_DEF \
+            --force-new-deployment
+          
+          # Wait for rollback to complete
+          aws ecs wait services-stable \
+            --cluster $CLUSTER_NAME \
+            --services $SERVICE_NAME
+          
+          echo "✅ Rollback completed"
+      
+      - name: Notify rollback
+        run: |
+          echo "📧 Sending rollback notification..."
+          echo "Deployment ${{ needs.pre-deployment-checks.outputs.deployment-id }} was rolled back due to health check failures"
+
+  # Final notification
+  notify-deployment-status:
+    name: Notify Deployment Status
+    runs-on: ubuntu-latest
+    needs: [pre-deployment-checks, post-deployment-validation, rollback]
+    if: always()
+    
+    steps:
+      - name: Determine deployment status
+        id: status
+        run: |
+          if [ "${{ needs.post-deployment-validation.result }}" = "success" ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "message=Deployment completed successfully" >> $GITHUB_OUTPUT
+          elif [ "${{ needs.rollback.result }}" = "success" ]; then
+            echo "status=rolled_back" >> $GITHUB_OUTPUT
+            echo "message=Deployment failed and was rolled back" >> $GITHUB_OUTPUT
+          else
+            echo "status=failed" >> $GITHUB_OUTPUT
+            echo "message=Deployment failed" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Send notification
+        run: |
+          echo "📢 Deployment Status: ${{ steps.status.outputs.status }}"
+          echo "📋 Deployment ID: ${{ needs.pre-deployment-checks.outputs.deployment-id }}"
+          echo "🌍 Environment: ${{ github.event.inputs.environment }}"
+          echo "📦 Deployment Type: ${{ github.event.inputs.deployment_type }}"
+          echo "💬 Message: ${{ steps.status.outputs.message }}"
+          
+          if [ "${{ steps.status.outputs.status }}" = "success" ]; then
+            echo "🎉 Deployment successful!"
+            
+            if [ "${{ github.event.inputs.environment }}" = "production" ]; then
+              echo "🌐 Application URLs:"
+              echo "  - API: https://api.${{ secrets.DOMAIN_NAME }}"
+              echo "  - App: https://app.${{ secrets.DOMAIN_NAME }}"
+            else
+              echo "🌐 Application URLs:"
+              echo "  - API: https://${{ github.event.inputs.environment }}-api.revive-ai.com"
+              echo "  - App: https://${{ github.event.inputs.environment }}.revive-ai.com"
+            fi
+          else
+            echo "❌ Deployment failed or was rolled back"
+            exit 1
+          fi

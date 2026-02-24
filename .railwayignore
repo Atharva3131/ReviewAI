@@ -1,0 +1,58 @@
+# Railway ignore file - files to exclude from deployment
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+.pytest_cache/
+.hypothesis/
+
+# Node
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Environment files (set these in Railway dashboard instead)
+.env
+.env.local
+.env.production
+.env.development
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Logs
+*.log
+logs/
+
+# Testing
+coverage/
+.coverage
+
+# Documentation (optional - remove if you want docs deployed)
+*.md
+docs/
+
+# Development files
+.kiro/
+start-dev.bat

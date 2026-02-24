@@ -1,0 +1,560 @@
+name: Monitoring and Health Checks
+
+on:
+  schedule:
+    # Run every 15 minutes
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to monitor'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+      check_type:
+        description: 'Type of health check'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - api
+          - database
+          - redis
+          - frontend
+          - external_services
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+
+jobs:
+  # API Health Check
+  api-health-check:
+    name: API Health Check
+    runs-on: ubuntu-latest
+    if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'api' || github.event_name == 'schedule'
+    
+    strategy:
+      matrix:
+        environment: [production, staging]
+    
+    steps:
+      - name: Set environment URLs
+        run: |
+          if [ "${{ matrix.environment }}" = "production" ]; then
+            echo "API_URL=https://api.${{ secrets.DOMAIN_NAME }}" >> $GITHUB_ENV
+            echo "APP_URL=https://app.${{ secrets.DOMAIN_NAME }}" >> $GITHUB_ENV
+          else
+            echo "API_URL=https://staging-api.revive-ai.com" >> $GITHUB_ENV
+            echo "APP_URL=https://staging.revive-ai.com" >> $GITHUB_ENV
+          fi
+      
+      - name: Check API health endpoint
+        run: |
+          echo "Checking API health at: ${{ env.API_URL }}/health"
+          
+          RESPONSE=$(curl -s -w "%{http_code}" -o response.json "${{ env.API_URL }}/health")
+          HTTP_CODE="${RESPONSE: -3}"
+          
+          echo "HTTP Status Code: $HTTP_CODE"
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ API health check failed with status $HTTP_CODE"
+            cat response.json
+            exit 1
+          fi
+          
+          echo "✅ API health check passed"
+          cat response.json
+      
+      - name: Check API response time
+        run: |
+          echo "Measuring API response time..."
+          
+          RESPONSE_TIME=$(curl -s -w "%{time_total}" -o /dev/null "${{ env.API_URL }}/health")
+          
+          echo "Response time: ${RESPONSE_TIME}s"
+          
+          # Alert if response time > 5 seconds
+          if (( $(echo "$RESPONSE_TIME > 5.0" | bc -l) )); then
+            echo "⚠️ API response time is high: ${RESPONSE_TIME}s"
+            echo "api_slow=true" >> $GITHUB_ENV
+          else
+            echo "✅ API response time is acceptable: ${RESPONSE_TIME}s"
+          fi
+      
+      - name: Check API endpoints
+        run: |
+          echo "Testing critical API endpoints..."
+          
+          # Test authentication endpoint
+          AUTH_RESPONSE=$(curl -s -w "%{http_code}" -o /dev/null "${{ env.API_URL }}/api/v1/auth/health")
+          echo "Auth endpoint: ${AUTH_RESPONSE: -3}"
+          
+          # Test reviews endpoint
+          REVIEWS_RESPONSE=$(curl -s -w "%{http_code}" -o /dev/null "${{ env.API_URL }}/api/v1/reviews/health")
+          echo "Reviews endpoint: ${REVIEWS_RESPONSE: -3}"
+          
+          # Test dashboard endpoint
+          DASHBOARD_RESPONSE=$(curl -s -w "%{http_code}" -o /dev/null "${{ env.API_URL }}/api/v1/dashboard/health")
+          echo "Dashboard endpoint: ${DASHBOARD_RESPONSE: -3}"
+          
+          # Check if any endpoint failed
+          if [ "${AUTH_RESPONSE: -3}" != "200" ] || [ "${REVIEWS_RESPONSE: -3}" != "200" ] || [ "${DASHBOARD_RESPONSE: -3}" != "200" ]; then
+            echo "❌ Some API endpoints are failing"
+            exit 1
+          fi
+          
+          echo "✅ All API endpoints are healthy"
+
+  # Database Health Check
+  database-health-check:
+    name: Database Health Check
+    runs-on: ubuntu-latest
+    if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'database' || github.event_name == 'schedule'
+    
+    strategy:
+      matrix:
+        environment: [production, staging]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      
+      - name: Check RDS instance status
+        run: |
+          DB_INSTANCE_ID="revive-ai-${{ matrix.environment }}-db"
+          
+          echo "Checking RDS instance: $DB_INSTANCE_ID"
+          
+          DB_STATUS=$(aws rds describe-db-instances \
+            --db-instance-identifier $DB_INSTANCE_ID \
+            --query 'DBInstances[0].DBInstanceStatus' \
+            --output text)
+          
+          echo "Database status: $DB_STATUS"
+          
+          if [ "$DB_STATUS" != "available" ]; then
+            echo "❌ Database is not available: $DB_STATUS"
+            exit 1
+          fi
+          
+          echo "✅ Database is available"
+      
+      - name: Check database connectivity
+        run: |
+          ENVIRONMENT="${{ matrix.environment }}"
+          
+          # Get network configuration
+          SUBNET_ID=$(aws ec2 describe-subnets \
+            --filters "Name=tag:Name,Values=revive-ai-${ENVIRONMENT}-private-subnet-1" \
+            --query 'Subnets[0].SubnetId' --output text)
+          
+          SECURITY_GROUP_ID=$(aws ec2 describe-security-groups \
+            --filters "Name=tag:Name,Values=revive-ai-${ENVIRONMENT}-ecs-sg" \
+            --query 'SecurityGroups[0].GroupId' --output text)
+          
+          # Run database connectivity test
+          TASK_ARN=$(aws ecs run-task \
+            --cluster revive-ai-${ENVIRONMENT}-cluster \
+            --task-definition revive-ai-${ENVIRONMENT}-backend \
+            --launch-type FARGATE \
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNET_ID],securityGroups=[$SECURITY_GROUP_ID],assignPublicIp=DISABLED}" \
+            --overrides '{"containerOverrides":[{"name":"revive-ai-'${ENVIRONMENT}'-backend","command":["python","-c","import psycopg2; import os; conn = psycopg2.connect(os.environ[\"DATABASE_URL\"]); print(\"Database connection successful\"); conn.close()"]}]}' \
+            --query 'tasks[0].taskArn' --output text)
+          
+          # Wait for task completion
+          aws ecs wait tasks-stopped \
+            --cluster revive-ai-${ENVIRONMENT}-cluster \
+            --tasks $TASK_ARN
+          
+          # Check result
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster revive-ai-${ENVIRONMENT}-cluster \
+            --tasks $TASK_ARN \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+          
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "❌ Database connectivity test failed"
+            exit 1
+          fi
+          
+          echo "✅ Database connectivity test passed"
+      
+      - name: Check database performance metrics
+        run: |
+          DB_INSTANCE_ID="revive-ai-${{ matrix.environment }}-db"
+          
+          # Get CPU utilization
+          CPU_UTILIZATION=$(aws cloudwatch get-metric-statistics \
+            --namespace AWS/RDS \
+            --metric-name CPUUtilization \
+            --dimensions Name=DBInstanceIdentifier,Value=$DB_INSTANCE_ID \
+            --start-time $(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%S) \
+            --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+            --period 300 \
+            --statistics Average \
+            --query 'Datapoints[0].Average' \
+            --output text)
+          
+          echo "Database CPU utilization: ${CPU_UTILIZATION}%"
+          
+          # Alert if CPU > 80%
+          if (( $(echo "$CPU_UTILIZATION > 80" | bc -l) )); then
+            echo "⚠️ High database CPU utilization: ${CPU_UTILIZATION}%"
+            echo "db_high_cpu=true" >> $GITHUB_ENV
+          fi
+          
+          # Get connection count
+          CONNECTIONS=$(aws cloudwatch get-metric-statistics \
+            --namespace AWS/RDS \
+            --metric-name DatabaseConnections \
+            --dimensions Name=DBInstanceIdentifier,Value=$DB_INSTANCE_ID \
+            --start-time $(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%S) \
+            --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+            --period 300 \
+            --statistics Average \
+            --query 'Datapoints[0].Average' \
+            --output text)
+          
+          echo "Database connections: $CONNECTIONS"
+
+  # Redis Health Check
+  redis-health-check:
+    name: Redis Health Check
+    runs-on: ubuntu-latest
+    if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'redis' || github.event_name == 'schedule'
+    
+    strategy:
+      matrix:
+        environment: [production, staging]
+    
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      
+      - name: Check ElastiCache cluster status
+        run: |
+          CLUSTER_ID="revive-ai-${{ matrix.environment }}-redis"
+          
+          echo "Checking ElastiCache cluster: $CLUSTER_ID"
+          
+          CLUSTER_STATUS=$(aws elasticache describe-cache-clusters \
+            --cache-cluster-id $CLUSTER_ID \
+            --query 'CacheClusters[0].CacheClusterStatus' \
+            --output text)
+          
+          echo "Redis cluster status: $CLUSTER_STATUS"
+          
+          if [ "$CLUSTER_STATUS" != "available" ]; then
+            echo "❌ Redis cluster is not available: $CLUSTER_STATUS"
+            exit 1
+          fi
+          
+          echo "✅ Redis cluster is available"
+      
+      - name: Check Redis performance metrics
+        run: |
+          CLUSTER_ID="revive-ai-${{ matrix.environment }}-redis"
+          
+          # Get CPU utilization
+          CPU_UTILIZATION=$(aws cloudwatch get-metric-statistics \
+            --namespace AWS/ElastiCache \
+            --metric-name CPUUtilization \
+            --dimensions Name=CacheClusterId,Value=$CLUSTER_ID \
+            --start-time $(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%S) \
+            --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+            --period 300 \
+            --statistics Average \
+            --query 'Datapoints[0].Average' \
+            --output text)
+          
+          echo "Redis CPU utilization: ${CPU_UTILIZATION}%"
+          
+          # Get memory usage
+          MEMORY_USAGE=$(aws cloudwatch get-metric-statistics \
+            --namespace AWS/ElastiCache \
+            --metric-name DatabaseMemoryUsagePercentage \
+            --dimensions Name=CacheClusterId,Value=$CLUSTER_ID \
+            --start-time $(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%S) \
+            --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+            --period 300 \
+            --statistics Average \
+            --query 'Datapoints[0].Average' \
+            --output text)
+          
+          echo "Redis memory usage: ${MEMORY_USAGE}%"
+          
+          # Alert if memory > 90%
+          if (( $(echo "$MEMORY_USAGE > 90" | bc -l) )); then
+            echo "⚠️ High Redis memory usage: ${MEMORY_USAGE}%"
+            echo "redis_high_memory=true" >> $GITHUB_ENV
+          fi
+
+  # Frontend Health Check
+  frontend-health-check:
+    name: Frontend Health Check
+    runs-on: ubuntu-latest
+    if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'frontend' || github.event_name == 'schedule'
+    
+    strategy:
+      matrix:
+        environment: [production, staging]
+    
+    steps:
+      - name: Set environment URLs
+        run: |
+          if [ "${{ matrix.environment }}" = "production" ]; then
+            echo "APP_URL=https://app.${{ secrets.DOMAIN_NAME }}" >> $GITHUB_ENV
+          else
+            echo "APP_URL=https://staging.revive-ai.com" >> $GITHUB_ENV
+          fi
+      
+      - name: Check frontend availability
+        run: |
+          echo "Checking frontend at: ${{ env.APP_URL }}"
+          
+          RESPONSE=$(curl -s -w "%{http_code}" -o response.html "${{ env.APP_URL }}")
+          HTTP_CODE="${RESPONSE: -3}"
+          
+          echo "HTTP Status Code: $HTTP_CODE"
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Frontend health check failed with status $HTTP_CODE"
+            exit 1
+          fi
+          
+          echo "✅ Frontend is accessible"
+      
+      - name: Check frontend performance
+        run: |
+          echo "Measuring frontend response time..."
+          
+          RESPONSE_TIME=$(curl -s -w "%{time_total}" -o /dev/null "${{ env.APP_URL }}")
+          
+          echo "Frontend response time: ${RESPONSE_TIME}s"
+          
+          # Alert if response time > 10 seconds
+          if (( $(echo "$RESPONSE_TIME > 10.0" | bc -l) )); then
+            echo "⚠️ Frontend response time is high: ${RESPONSE_TIME}s"
+            echo "frontend_slow=true" >> $GITHUB_ENV
+          else
+            echo "✅ Frontend response time is acceptable: ${RESPONSE_TIME}s"
+          fi
+      
+      - name: Check CloudFront distribution
+        run: |
+          # Get CloudFront distribution for the environment
+          DISTRIBUTION_ID=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?Comment=='revive-ai ${{ matrix.environment }} frontend distribution'].Id" \
+            --output text)
+          
+          if [ -n "$DISTRIBUTION_ID" ]; then
+            echo "CloudFront Distribution ID: $DISTRIBUTION_ID"
+            
+            DISTRIBUTION_STATUS=$(aws cloudfront get-distribution \
+              --id $DISTRIBUTION_ID \
+              --query 'Distribution.Status' \
+              --output text)
+            
+            echo "Distribution status: $DISTRIBUTION_STATUS"
+            
+            if [ "$DISTRIBUTION_STATUS" != "Deployed" ]; then
+              echo "⚠️ CloudFront distribution is not deployed: $DISTRIBUTION_STATUS"
+            else
+              echo "✅ CloudFront distribution is deployed"
+            fi
+          else
+            echo "No CloudFront distribution found for ${{ matrix.environment }}"
+          fi
+
+  # External Services Health Check
+  external-services-check:
+    name: External Services Check
+    runs-on: ubuntu-latest
+    if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'external_services' || github.event_name == 'schedule'
+    
+    steps:
+      - name: Check OpenAI API
+        run: |
+          echo "Checking OpenAI API availability..."
+          
+          RESPONSE=$(curl -s -w "%{http_code}" -o /dev/null \
+            -H "Authorization: Bearer ${{ secrets.OPENAI_API_KEY }}" \
+            "https://api.openai.com/v1/models")
+          
+          HTTP_CODE="${RESPONSE: -3}"
+          
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ OpenAI API is accessible"
+          else
+            echo "⚠️ OpenAI API check failed with status $HTTP_CODE"
+            echo "openai_api_down=true" >> $GITHUB_ENV
+          fi
+        continue-on-error: true
+      
+      - name: Check Google Gemini API
+        run: |
+          echo "Checking Google Gemini API availability..."
+          
+          RESPONSE=$(curl -s -w "%{http_code}" -o /dev/null \
+            "https://generativelanguage.googleapis.com/v1/models?key=${{ secrets.GEMINI_API_KEY }}")
+          
+          HTTP_CODE="${RESPONSE: -3}"
+          
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Google Gemini API is accessible"
+          else
+            echo "⚠️ Google Gemini API check failed with status $HTTP_CODE"
+            echo "gemini_api_down=true" >> $GITHUB_ENV
+          fi
+        continue-on-error: true
+      
+      - name: Check SendGrid API
+        run: |
+          echo "Checking SendGrid API availability..."
+          
+          RESPONSE=$(curl -s -w "%{http_code}" -o /dev/null \
+            -H "Authorization: Bearer ${{ secrets.SENDGRID_API_KEY }}" \
+            "https://api.sendgrid.com/v3/user/profile")
+          
+          HTTP_CODE="${RESPONSE: -3}"
+          
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ SendGrid API is accessible"
+          else
+            echo "⚠️ SendGrid API check failed with status $HTTP_CODE"
+            echo "sendgrid_api_down=true" >> $GITHUB_ENV
+          fi
+        continue-on-error: true
+
+  # SSL Certificate Check
+  ssl-certificate-check:
+    name: SSL Certificate Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event.inputs.check_type == 'all'
+    
+    strategy:
+      matrix:
+        environment: [production, staging]
+    
+    steps:
+      - name: Set environment URLs
+        run: |
+          if [ "${{ matrix.environment }}" = "production" ]; then
+            echo "API_DOMAIN=api.${{ secrets.DOMAIN_NAME }}" >> $GITHUB_ENV
+            echo "APP_DOMAIN=app.${{ secrets.DOMAIN_NAME }}" >> $GITHUB_ENV
+          else
+            echo "API_DOMAIN=staging-api.revive-ai.com" >> $GITHUB_ENV
+            echo "APP_DOMAIN=staging.revive-ai.com" >> $GITHUB_ENV
+          fi
+      
+      - name: Check SSL certificates
+        run: |
+          echo "Checking SSL certificates..."
+          
+          # Check API domain
+          API_EXPIRY=$(echo | openssl s_client -servername ${{ env.API_DOMAIN }} -connect ${{ env.API_DOMAIN }}:443 2>/dev/null | openssl x509 -noout -dates | grep notAfter | cut -d= -f2)
+          API_EXPIRY_EPOCH=$(date -d "$API_EXPIRY" +%s)
+          CURRENT_EPOCH=$(date +%s)
+          API_DAYS_LEFT=$(( (API_EXPIRY_EPOCH - CURRENT_EPOCH) / 86400 ))
+          
+          echo "API SSL certificate expires in $API_DAYS_LEFT days ($API_EXPIRY)"
+          
+          # Check APP domain
+          APP_EXPIRY=$(echo | openssl s_client -servername ${{ env.APP_DOMAIN }} -connect ${{ env.APP_DOMAIN }}:443 2>/dev/null | openssl x509 -noout -dates | grep notAfter | cut -d= -f2)
+          APP_EXPIRY_EPOCH=$(date -d "$APP_EXPIRY" +%s)
+          APP_DAYS_LEFT=$(( (APP_EXPIRY_EPOCH - CURRENT_EPOCH) / 86400 ))
+          
+          echo "APP SSL certificate expires in $APP_DAYS_LEFT days ($APP_EXPIRY)"
+          
+          # Alert if certificates expire within 30 days
+          if [ $API_DAYS_LEFT -lt 30 ] || [ $APP_DAYS_LEFT -lt 30 ]; then
+            echo "⚠️ SSL certificates are expiring soon!"
+            echo "ssl_expiring_soon=true" >> $GITHUB_ENV
+          else
+            echo "✅ SSL certificates are valid"
+          fi
+
+  # Generate monitoring report
+  generate-monitoring-report:
+    name: Generate Monitoring Report
+    runs-on: ubuntu-latest
+    needs: [api-health-check, database-health-check, redis-health-check, frontend-health-check, external-services-check, ssl-certificate-check]
+    if: always()
+    
+    steps:
+      - name: Generate monitoring summary
+        run: |
+          echo "# Monitoring Report" > monitoring-report.md
+          echo "Generated on: $(date)" >> monitoring-report.md
+          echo "" >> monitoring-report.md
+          
+          echo "## Health Check Results" >> monitoring-report.md
+          echo "- API Health Check: ${{ needs.api-health-check.result }}" >> monitoring-report.md
+          echo "- Database Health Check: ${{ needs.database-health-check.result }}" >> monitoring-report.md
+          echo "- Redis Health Check: ${{ needs.redis-health-check.result }}" >> monitoring-report.md
+          echo "- Frontend Health Check: ${{ needs.frontend-health-check.result }}" >> monitoring-report.md
+          echo "- External Services Check: ${{ needs.external-services-check.result }}" >> monitoring-report.md
+          echo "- SSL Certificate Check: ${{ needs.ssl-certificate-check.result }}" >> monitoring-report.md
+          echo "" >> monitoring-report.md
+          
+          # Add alerts section
+          echo "## Alerts" >> monitoring-report.md
+          
+          # Check for any failures
+          if [ "${{ needs.api-health-check.result }}" = "failure" ]; then
+            echo "🚨 API health check failed" >> monitoring-report.md
+          fi
+          
+          if [ "${{ needs.database-health-check.result }}" = "failure" ]; then
+            echo "🚨 Database health check failed" >> monitoring-report.md
+          fi
+          
+          if [ "${{ needs.redis-health-check.result }}" = "failure" ]; then
+            echo "🚨 Redis health check failed" >> monitoring-report.md
+          fi
+          
+          if [ "${{ needs.frontend-health-check.result }}" = "failure" ]; then
+            echo "🚨 Frontend health check failed" >> monitoring-report.md
+          fi
+          
+          echo "" >> monitoring-report.md
+          echo "## Recommendations" >> monitoring-report.md
+          echo "1. Review failed health checks immediately" >> monitoring-report.md
+          echo "2. Monitor performance metrics for any degradation" >> monitoring-report.md
+          echo "3. Check external service dependencies" >> monitoring-report.md
+          echo "4. Verify SSL certificate renewal processes" >> monitoring-report.md
+          
+          cat monitoring-report.md
+      
+      - name: Upload monitoring report
+        uses: actions/upload-artifact@v3
+        with:
+          name: monitoring-report
+          path: monitoring-report.md
+          retention-days: 7
+      
+      - name: Alert on critical failures
+        if: needs.api-health-check.result == 'failure' || needs.database-health-check.result == 'failure'
+        run: |
+          echo "🚨 CRITICAL: Core services are failing!"
+          echo "API Health: ${{ needs.api-health-check.result }}"
+          echo "Database Health: ${{ needs.database-health-check.result }}"
+          echo "Immediate attention required!"
+          exit 1

@@ -1,0 +1,31 @@
+version: 2
+discovery:
+  allowed-hostnames:
+    - localhost
+  network-idle-timeout: 750
+snapshot:
+  widths:
+    - 375   # Mobile
+    - 768   # Tablet
+    - 1280  # Desktop
+  min-height: 1024
+  percy-css: |
+    /* Hide dynamic content that changes between runs */
+    [data-testid="timestamp"],
+    [data-testid="live-data"],
+    .animate-pulse,
+    .animate-spin {
+      visibility: hidden !important;
+    }
+    
+    /* Ensure consistent font rendering */
+    * {
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+static-snapshots:
+  base-url: http://localhost:3000
+  snapshot-files: '**/*.html'
+  ignore-files: 
+    - '**/node_modules/**'
+    - '**/.next/**'

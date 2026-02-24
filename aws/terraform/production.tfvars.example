@@ -1,0 +1,102 @@
+# Production environment configuration for Revive AI
+# Copy this file to production.tfvars and fill in the actual values
+
+# Basic Configuration
+aws_region    = "us-east-1"
+environment   = "production"
+project_name  = "revive-ai"
+domain_name   = "reviveai.com"
+
+# Monitoring and alerting
+alert_email = "alerts@reviveai.com"
+
+# API Keys (store these in AWS Secrets Manager or use environment variables)
+# These should be provided via environment variables or terraform.tfvars (not committed to git)
+openai_api_key   = ""  # Set via TF_VAR_openai_api_key environment variable
+gemini_api_key   = ""  # Set via TF_VAR_gemini_api_key environment variable
+sendgrid_api_key = ""  # Set via TF_VAR_sendgrid_api_key environment variable
+
+# Database Configuration
+postgres_instance_class = "db.t3.medium"
+postgres_allocated_storage = 100
+postgres_max_allocated_storage = 1000
+postgres_backup_retention_period = 7
+postgres_backup_window = "03:00-04:00"
+postgres_maintenance_window = "sun:04:00-sun:05:00"
+postgres_deletion_protection = true
+postgres_skip_final_snapshot = false
+
+# Redis Configuration
+redis_node_type = "cache.t3.medium"
+redis_num_cache_clusters = 2
+redis_parameter_group_name = "default.redis7"
+redis_port = 6379
+redis_at_rest_encryption_enabled = true
+redis_transit_encryption_enabled = true
+
+# ECS Configuration
+ecs_cpu = "1024"
+ecs_memory = "2048"
+ecs_desired_count = 2
+ecs_min_capacity = 1
+ecs_max_capacity = 10
+ecs_enable_execute_command = true
+
+# Auto Scaling Configuration
+scale_up_threshold = 70
+scale_down_threshold = 30
+scale_up_cooldown = 300
+scale_down_cooldown = 300
+
+# Load Balancer Configuration
+alb_enable_deletion_protection = true
+alb_idle_timeout = 60
+alb_enable_http2 = true
+
+# CloudFront Configuration
+cloudfront_price_class = "PriceClass_100"  # North America and Europe only
+cloudfront_minimum_protocol_version = "TLSv1.2_2021"
+cloudfront_default_ttl = 3600
+cloudfront_max_ttl = 86400
+
+# Monitoring and Logging
+enable_container_insights = true
+log_retention_days = 30
+enable_detailed_monitoring = true
+enable_performance_insights = true
+
+# Security Configuration
+enable_deletion_protection = true
+enable_backup_encryption = true
+enable_storage_encryption = true
+enable_waf = true
+enable_shield_advanced = false  # Set to true for DDoS protection (additional cost)
+
+# Networking
+enable_nat_gateway = true
+enable_vpn_gateway = false
+enable_flow_logs = true
+
+# Cost Optimization
+enable_spot_instances = false  # Set to true for cost savings (less reliability)
+enable_reserved_instances = true
+
+# Backup and Disaster Recovery
+backup_retention_period = 7
+enable_cross_region_backup = false
+enable_point_in_time_recovery = true
+
+# Compliance and Governance
+enable_config = true
+enable_cloudtrail = true
+enable_guardduty = true
+enable_security_hub = false
+
+# Tags
+additional_tags = {
+  Owner       = "DevOps Team"
+  CostCenter  = "Engineering"
+  Compliance  = "SOC2"
+  Backup      = "Required"
+  Monitoring  = "Critical"
+}

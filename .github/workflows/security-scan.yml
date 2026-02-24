@@ -1,0 +1,502 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run daily at 3 AM UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+
+jobs:
+  # Static Application Security Testing (SAST)
+  sast-scan:
+    name: SAST Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better analysis
+      
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-fs-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+      
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-fs-results.sarif'
+          category: 'trivy-fs'
+      
+      - name: Run CodeQL Analysis
+        uses: github/codeql-action/init@v2
+        with:
+          languages: python, javascript
+          queries: security-and-quality
+      
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v2
+      
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+        with:
+          category: 'codeql'
+
+  # Python security scanning
+  python-security:
+    name: Python Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install bandit safety semgrep
+      
+      - name: Run Bandit security linter
+        run: |
+          cd backend
+          bandit -r app/ -f json -o bandit-report.json
+          bandit -r app/ -f txt -o bandit-report.txt
+          echo "=== Bandit Security Report ==="
+          cat bandit-report.txt
+        continue-on-error: true
+      
+      - name: Run Safety dependency check
+        run: |
+          cd backend
+          safety check -r requirements.txt --json --output safety-report.json
+          safety check -r requirements.txt --output safety-report.txt
+          echo "=== Safety Dependency Report ==="
+          cat safety-report.txt
+        continue-on-error: true
+      
+      - name: Run Semgrep security scan
+        run: |
+          cd backend
+          semgrep --config=auto --json --output=semgrep-report.json app/
+          semgrep --config=auto app/
+        continue-on-error: true
+      
+      - name: Upload Python security reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: python-security-reports
+          path: |
+            backend/bandit-report.*
+            backend/safety-report.*
+            backend/semgrep-report.json
+          retention-days: 30
+
+  # JavaScript/Node.js security scanning
+  javascript-security:
+    name: JavaScript Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+      
+      - name: Run npm audit
+        run: |
+          cd frontend
+          npm audit --json > npm-audit-report.json
+          npm audit --audit-level=moderate > npm-audit-report.txt
+          echo "=== NPM Audit Report ==="
+          cat npm-audit-report.txt
+        continue-on-error: true
+      
+      - name: Install ESLint security plugin
+        run: |
+          cd frontend
+          npm install --save-dev eslint-plugin-security
+      
+      - name: Run ESLint security rules
+        run: |
+          cd frontend
+          npx eslint src/ --ext .ts,.tsx,.js,.jsx --config .eslintrc.json --format json --output-file eslint-security-report.json
+          npx eslint src/ --ext .ts,.tsx,.js,.jsx --config .eslintrc.json
+        continue-on-error: true
+      
+      - name: Run Semgrep for JavaScript
+        run: |
+          cd frontend
+          semgrep --config=auto --json --output=semgrep-js-report.json src/
+          semgrep --config=auto src/
+        continue-on-error: true
+      
+      - name: Upload JavaScript security reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: javascript-security-reports
+          path: |
+            frontend/npm-audit-report.*
+            frontend/eslint-security-report.json
+            frontend/semgrep-js-report.json
+          retention-days: 30
+
+  # Docker security scanning
+  docker-security:
+    name: Docker Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build backend image for scanning
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          tags: revive-ai-backend:security-scan
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Build frontend image for scanning
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          tags: revive-ai-frontend:security-scan
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Run Trivy scan on backend image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'revive-ai-backend:security-scan'
+          format: 'sarif'
+          output: 'trivy-backend-image.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+      
+      - name: Run Trivy scan on frontend image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'revive-ai-frontend:security-scan'
+          format: 'sarif'
+          output: 'trivy-frontend-image.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+      
+      - name: Upload Docker scan results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: |
+            trivy-backend-image.sarif
+            trivy-frontend-image.sarif
+          category: 'trivy-docker'
+      
+      - name: Run Docker Bench Security
+        run: |
+          docker run --rm --net host --pid host --userns host --cap-add audit_control \
+            -e DOCKER_CONTENT_TRUST=$DOCKER_CONTENT_TRUST \
+            -v /etc:/etc:ro \
+            -v /usr/bin/containerd:/usr/bin/containerd:ro \
+            -v /usr/bin/runc:/usr/bin/runc:ro \
+            -v /usr/lib/systemd:/usr/lib/systemd:ro \
+            -v /var/lib:/var/lib:ro \
+            -v /var/run/docker.sock:/var/run/docker.sock:ro \
+            --label docker_bench_security \
+            docker/docker-bench-security > docker-bench-report.txt
+          echo "=== Docker Bench Security Report ==="
+          cat docker-bench-report.txt
+        continue-on-error: true
+      
+      - name: Upload Docker security reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: docker-security-reports
+          path: |
+            trivy-backend-image.sarif
+            trivy-frontend-image.sarif
+            docker-bench-report.txt
+          retention-days: 30
+
+  # Infrastructure security scanning
+  infrastructure-security:
+    name: Infrastructure Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.0
+      
+      - name: Run Checkov on Terraform
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: aws/terraform
+          framework: terraform
+          output_format: sarif
+          output_file_path: checkov-terraform.sarif
+          soft_fail: true
+      
+      - name: Upload Checkov results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: checkov-terraform.sarif
+          category: 'checkov-terraform'
+      
+      - name: Run Trivy on Terraform
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          scan-ref: 'aws/terraform'
+          format: 'sarif'
+          output: 'trivy-terraform.sarif'
+      
+      - name: Upload Trivy Terraform results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: trivy-terraform.sarif
+          category: 'trivy-terraform'
+      
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: aws/terraform
+          format: sarif
+          sarif_file: tfsec.sarif
+          soft_fail: true
+      
+      - name: Upload tfsec results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: tfsec.sarif
+          category: 'tfsec'
+      
+      - name: Upload infrastructure security reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: infrastructure-security-reports
+          path: |
+            checkov-terraform.sarif
+            trivy-terraform.sarif
+            tfsec.sarif
+          retention-days: 30
+
+  # Secrets scanning
+  secrets-scan:
+    name: Secrets Scanning
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for secret scanning
+      
+      - name: Run GitLeaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+        with:
+          config-path: .gitleaks.toml
+      
+      - name: Run TruffleHog
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+          extra_args: --debug --only-verified
+      
+      - name: Install detect-secrets
+        run: |
+          pip install detect-secrets
+      
+      - name: Run detect-secrets
+        run: |
+          detect-secrets scan --all-files --baseline .secrets.baseline
+          detect-secrets audit .secrets.baseline
+        continue-on-error: true
+
+  # License compliance scanning
+  license-compliance:
+    name: License Compliance Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install Python dependencies and license checker
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install pip-licenses
+      
+      - name: Check Python licenses
+        run: |
+          cd backend
+          pip-licenses --format=json --output-file=python-licenses.json
+          pip-licenses --fail-on="GPL v3"
+        continue-on-error: true
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      
+      - name: Install JavaScript dependencies and license checker
+        run: |
+          cd frontend
+          npm ci
+          npm install -g license-checker
+      
+      - name: Check JavaScript licenses
+        run: |
+          cd frontend
+          license-checker --json --out javascript-licenses.json
+          license-checker --failOn "GPL-3.0"
+        continue-on-error: true
+      
+      - name: Upload license reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: license-compliance-reports
+          path: |
+            backend/python-licenses.json
+            frontend/javascript-licenses.json
+          retention-days: 30
+
+  # Generate security report
+  security-report:
+    name: Generate Security Report
+    runs-on: ubuntu-latest
+    needs: [sast-scan, python-security, javascript-security, docker-security, infrastructure-security, secrets-scan, license-compliance]
+    if: always()
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+      
+      - name: Generate security summary
+        run: |
+          echo "# Security Scan Report" > security-report.md
+          echo "Generated on: $(date)" >> security-report.md
+          echo "" >> security-report.md
+          
+          echo "## Scan Results" >> security-report.md
+          echo "- SAST Scan: ${{ needs.sast-scan.result }}" >> security-report.md
+          echo "- Python Security: ${{ needs.python-security.result }}" >> security-report.md
+          echo "- JavaScript Security: ${{ needs.javascript-security.result }}" >> security-report.md
+          echo "- Docker Security: ${{ needs.docker-security.result }}" >> security-report.md
+          echo "- Infrastructure Security: ${{ needs.infrastructure-security.result }}" >> security-report.md
+          echo "- Secrets Scan: ${{ needs.secrets-scan.result }}" >> security-report.md
+          echo "- License Compliance: ${{ needs.license-compliance.result }}" >> security-report.md
+          echo "" >> security-report.md
+          
+          echo "## Security Reports Generated" >> security-report.md
+          echo "The following security reports have been generated:" >> security-report.md
+          find . -name "*.sarif" -o -name "*security*" -o -name "*audit*" | sort >> security-report.md
+          
+          echo "" >> security-report.md
+          echo "## Recommendations" >> security-report.md
+          echo "1. Review all CRITICAL and HIGH severity findings" >> security-report.md
+          echo "2. Update dependencies with known vulnerabilities" >> security-report.md
+          echo "3. Fix any secrets detected in the codebase" >> security-report.md
+          echo "4. Ensure infrastructure follows security best practices" >> security-report.md
+          echo "5. Verify license compliance for all dependencies" >> security-report.md
+          
+          cat security-report.md
+      
+      - name: Upload security report
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-report
+          path: security-report.md
+          retention-days: 30
+      
+      - name: Comment on PR with security summary
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('security-report.md', 'utf8');
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🔒 Security Scan Results\n\n${report}`
+            });
+
+  # Notify security team
+  notify-security:
+    name: Notify Security Team
+    runs-on: ubuntu-latest
+    needs: [security-report]
+    if: failure() && (github.ref == 'refs/heads/main' || github.event_name == 'schedule')
+    
+    steps:
+      - name: Notify on critical security findings
+        run: |
+          echo "🚨 Critical security findings detected!"
+          echo "Please review the security scan results immediately."
+          echo "Repository: ${{ github.repository }}"
+          echo "Branch: ${{ github.ref }}"
+          echo "Commit: ${{ github.sha }}"
+          # Add notification logic here (Slack, email, etc.)

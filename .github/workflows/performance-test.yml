@@ -1,0 +1,687 @@
+name: Performance Testing
+
+on:
+  schedule:
+    # Run performance tests daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to test'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      test_type:
+        description: 'Type of performance test'
+        required: true
+        default: 'load'
+        type: choice
+        options:
+          - load
+          - stress
+          - spike
+          - volume
+          - endurance
+      duration:
+        description: 'Test duration in minutes'
+        required: false
+        default: '10'
+        type: string
+      concurrent_users:
+        description: 'Number of concurrent users'
+        required: false
+        default: '50'
+        type: string
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '18'
+
+jobs:
+  # Setup performance testing environment
+  setup-performance-test:
+    name: Setup Performance Test
+    runs-on: ubuntu-latest
+    
+    outputs:
+      base_url: ${{ steps.setup.outputs.base_url }}
+      api_url: ${{ steps.setup.outputs.api_url }}
+      test_config: ${{ steps.setup.outputs.test_config }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup test configuration
+        id: setup
+        run: |
+          ENVIRONMENT="${{ github.event.inputs.environment || 'staging' }}"
+          TEST_TYPE="${{ github.event.inputs.test_type || 'load' }}"
+          DURATION="${{ github.event.inputs.duration || '10' }}"
+          CONCURRENT_USERS="${{ github.event.inputs.concurrent_users || '50' }}"
+          
+          if [ "$ENVIRONMENT" = "production" ]; then
+            BASE_URL="https://app.${{ secrets.DOMAIN_NAME }}"
+            API_URL="https://api.${{ secrets.DOMAIN_NAME }}"
+          else
+            BASE_URL="https://staging.revive-ai.com"
+            API_URL="https://staging-api.revive-ai.com"
+          fi
+          
+          echo "base_url=$BASE_URL" >> $GITHUB_OUTPUT
+          echo "api_url=$API_URL" >> $GITHUB_OUTPUT
+          
+          # Create test configuration
+          cat > test-config.json << EOF
+          {
+            "environment": "$ENVIRONMENT",
+            "test_type": "$TEST_TYPE",
+            "duration_minutes": $DURATION,
+            "concurrent_users": $CONCURRENT_USERS,
+            "base_url": "$BASE_URL",
+            "api_url": "$API_URL"
+          }
+          EOF
+          
+          echo "test_config=$(cat test-config.json | jq -c .)" >> $GITHUB_OUTPUT
+          
+          echo "Performance test configuration:"
+          cat test-config.json | jq .
+      
+      - name: Upload test configuration
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-config
+          path: test-config.json
+          retention-days: 7
+
+  # API Performance Testing with Locust
+  api-performance-test:
+    name: API Performance Test
+    runs-on: ubuntu-latest
+    needs: [setup-performance-test]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install performance testing tools
+        run: |
+          pip install --upgrade pip
+          pip install locust requests faker
+      
+      - name: Create Locust test file
+        run: |
+          cat > locustfile.py << 'EOF'
+          import json
+          import random
+          from locust import HttpUser, task, between
+          from faker import Faker
+          
+          fake = Faker()
+          
+          class ReviveAIUser(HttpUser):
+              wait_time = between(1, 3)
+              
+              def on_start(self):
+                  """Setup user session"""
+                  self.client.verify = False  # Skip SSL verification for testing
+                  
+                  # Login and get token
+                  login_data = {
+                      "email": "test@example.com",
+                      "password": "testpassword123"
+                  }
+                  
+                  response = self.client.post("/api/v1/auth/login", json=login_data)
+                  if response.status_code == 200:
+                      self.token = response.json().get("access_token")
+                      self.headers = {"Authorization": f"Bearer {self.token}"}
+                  else:
+                      self.headers = {}
+              
+              @task(3)
+              def get_dashboard_metrics(self):
+                  """Test dashboard metrics endpoint"""
+                  self.client.get("/api/v1/dashboard/metrics", headers=self.headers)
+              
+              @task(2)
+              def get_reviews(self):
+                  """Test reviews listing endpoint"""
+                  params = {
+                      "page": random.randint(1, 5),
+                      "limit": random.choice([10, 20, 50])
+                  }
+                  self.client.get("/api/v1/reviews", params=params, headers=self.headers)
+              
+              @task(2)
+              def get_customers(self):
+                  """Test customers listing endpoint"""
+                  params = {
+                      "page": random.randint(1, 3),
+                      "limit": random.choice([10, 20])
+                  }
+                  self.client.get("/api/v1/customers", params=params, headers=self.headers)
+              
+              @task(1)
+              def create_review(self):
+                  """Test review creation endpoint"""
+                  review_data = {
+                      "platform": "google",
+                      "external_id": fake.uuid4(),
+                      "customer_name": fake.name(),
+                      "rating": random.randint(1, 5),
+                      "content": fake.text(max_nb_chars=200)
+                  }
+                  self.client.post("/api/v1/reviews/ingest", json=review_data, headers=self.headers)
+              
+              @task(1)
+              def analyze_review(self):
+                  """Test review analysis endpoint"""
+                  analysis_data = {
+                      "content": fake.text(max_nb_chars=150),
+                      "rating": random.randint(1, 5)
+                  }
+                  self.client.post("/api/v1/reviews/analyze", json=analysis_data, headers=self.headers)
+              
+              @task(1)
+              def health_check(self):
+                  """Test health check endpoint"""
+                  self.client.get("/health")
+          EOF
+      
+      - name: Run Locust performance test
+        run: |
+          API_URL="${{ needs.setup-performance-test.outputs.api_url }}"
+          TEST_TYPE="${{ github.event.inputs.test_type || 'load' }}"
+          DURATION="${{ github.event.inputs.duration || '10' }}"
+          CONCURRENT_USERS="${{ github.event.inputs.concurrent_users || '50' }}"
+          
+          # Configure test parameters based on test type
+          case $TEST_TYPE in
+            "load")
+              SPAWN_RATE=10
+              ;;
+            "stress")
+              CONCURRENT_USERS=$((CONCURRENT_USERS * 2))
+              SPAWN_RATE=20
+              ;;
+            "spike")
+              SPAWN_RATE=$((CONCURRENT_USERS / 2))
+              ;;
+            "volume")
+              CONCURRENT_USERS=$((CONCURRENT_USERS * 3))
+              SPAWN_RATE=5
+              ;;
+            "endurance")
+              DURATION=$((DURATION * 6))  # 6x longer for endurance
+              SPAWN_RATE=5
+              ;;
+          esac
+          
+          echo "Running $TEST_TYPE test with $CONCURRENT_USERS users for ${DURATION}m"
+          
+          # Run Locust test
+          locust -f locustfile.py \
+            --host="$API_URL" \
+            --users=$CONCURRENT_USERS \
+            --spawn-rate=$SPAWN_RATE \
+            --run-time=${DURATION}m \
+            --html=locust-report.html \
+            --csv=locust-results \
+            --headless
+      
+      - name: Upload Locust results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: api-performance-results
+          path: |
+            locust-report.html
+            locust-results_*.csv
+          retention-days: 30
+
+  # Frontend Performance Testing with Lighthouse
+  frontend-performance-test:
+    name: Frontend Performance Test
+    runs-on: ubuntu-latest
+    needs: [setup-performance-test]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      
+      - name: Install Lighthouse CI
+        run: |
+          npm install -g @lhci/cli@0.12.x
+      
+      - name: Create Lighthouse configuration
+        run: |
+          BASE_URL="${{ needs.setup-performance-test.outputs.base_url }}"
+          
+          cat > lighthouserc.json << EOF
+          {
+            "ci": {
+              "collect": {
+                "url": [
+                  "$BASE_URL",
+                  "$BASE_URL/login",
+                  "$BASE_URL/dashboard",
+                  "$BASE_URL/dashboard/reviews",
+                  "$BASE_URL/dashboard/customers"
+                ],
+                "numberOfRuns": 3,
+                "settings": {
+                  "chromeFlags": "--no-sandbox --disable-dev-shm-usage"
+                }
+              },
+              "assert": {
+                "assertions": {
+                  "categories:performance": ["error", {"minScore": 0.7}],
+                  "categories:accessibility": ["error", {"minScore": 0.9}],
+                  "categories:best-practices": ["error", {"minScore": 0.8}],
+                  "categories:seo": ["error", {"minScore": 0.8}]
+                }
+              },
+              "upload": {
+                "target": "filesystem",
+                "outputDir": "./lighthouse-results"
+              }
+            }
+          }
+          EOF
+      
+      - name: Run Lighthouse CI
+        run: |
+          lhci autorun
+        continue-on-error: true
+      
+      - name: Upload Lighthouse results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: frontend-performance-results
+          path: |
+            lighthouse-results/
+            .lighthouseci/
+          retention-days: 30
+
+  # Database Performance Testing
+  database-performance-test:
+    name: Database Performance Test
+    runs-on: ubuntu-latest
+    needs: [setup-performance-test]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install psycopg2-binary sqlalchemy asyncpg
+      
+      - name: Create database performance test
+        run: |
+          cat > db_performance_test.py << 'EOF'
+          import asyncio
+          import time
+          import statistics
+          import asyncpg
+          import json
+          from concurrent.futures import ThreadPoolExecutor
+          
+          async def test_connection_pool():
+              """Test database connection pool performance"""
+              results = []
+              
+              # Test connection creation time
+              for i in range(10):
+                  start_time = time.time()
+                  conn = await asyncpg.connect(
+                      host=os.environ.get('DB_HOST'),
+                      port=5432,
+                      user=os.environ.get('DB_USER'),
+                      password=os.environ.get('DB_PASSWORD'),
+                      database=os.environ.get('DB_NAME')
+                  )
+                  await conn.close()
+                  end_time = time.time()
+                  results.append(end_time - start_time)
+              
+              return {
+                  'avg_connection_time': statistics.mean(results),
+                  'max_connection_time': max(results),
+                  'min_connection_time': min(results)
+              }
+          
+          async def test_query_performance():
+              """Test query performance"""
+              conn = await asyncpg.connect(
+                  host=os.environ.get('DB_HOST'),
+                  port=5432,
+                  user=os.environ.get('DB_USER'),
+                  password=os.environ.get('DB_PASSWORD'),
+                  database=os.environ.get('DB_NAME')
+              )
+              
+              queries = [
+                  "SELECT COUNT(*) FROM reviews",
+                  "SELECT COUNT(*) FROM customers",
+                  "SELECT COUNT(*) FROM organizations",
+                  "SELECT * FROM reviews ORDER BY created_at DESC LIMIT 100",
+                  "SELECT * FROM customers WHERE churn_risk_score > 0.5 LIMIT 50"
+              ]
+              
+              results = {}
+              
+              for query in queries:
+                  times = []
+                  for _ in range(5):
+                      start_time = time.time()
+                      await conn.fetch(query)
+                      end_time = time.time()
+                      times.append(end_time - start_time)
+                  
+                  results[query] = {
+                      'avg_time': statistics.mean(times),
+                      'max_time': max(times),
+                      'min_time': min(times)
+                  }
+              
+              await conn.close()
+              return results
+          
+          async def main():
+              connection_results = await test_connection_pool()
+              query_results = await test_query_performance()
+              
+              results = {
+                  'connection_performance': connection_results,
+                  'query_performance': query_results,
+                  'timestamp': time.time()
+              }
+              
+              with open('db-performance-results.json', 'w') as f:
+                  json.dump(results, f, indent=2)
+              
+              print("Database Performance Results:")
+              print(json.dumps(results, indent=2))
+          
+          if __name__ == "__main__":
+              import os
+              asyncio.run(main())
+          EOF
+      
+      - name: Run database performance test
+        run: |
+          ENVIRONMENT="${{ github.event.inputs.environment || 'staging' }}"
+          
+          # Get database connection details from AWS
+          DB_ENDPOINT=$(aws rds describe-db-instances \
+            --db-instance-identifier revive-ai-${ENVIRONMENT}-db \
+            --query 'DBInstances[0].Endpoint.Address' \
+            --output text)
+          
+          export DB_HOST=$DB_ENDPOINT
+          export DB_USER="revive_ai_user"
+          export DB_PASSWORD="${{ secrets.DB_PASSWORD }}"
+          export DB_NAME="revive_ai"
+          
+          python db_performance_test.py
+        continue-on-error: true
+      
+      - name: Upload database performance results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: database-performance-results
+          path: db-performance-results.json
+          retention-days: 30
+
+  # Memory and Resource Usage Testing
+  resource-usage-test:
+    name: Resource Usage Test
+    runs-on: ubuntu-latest
+    needs: [setup-performance-test]
+    
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      
+      - name: Monitor ECS service metrics
+        run: |
+          ENVIRONMENT="${{ github.event.inputs.environment || 'staging' }}"
+          CLUSTER_NAME="revive-ai-${ENVIRONMENT}-cluster"
+          SERVICE_NAME="revive-ai-${ENVIRONMENT}-backend"
+          
+          echo "Monitoring ECS service metrics for $SERVICE_NAME"
+          
+          # Get CPU utilization
+          CPU_UTILIZATION=$(aws cloudwatch get-metric-statistics \
+            --namespace AWS/ECS \
+            --metric-name CPUUtilization \
+            --dimensions Name=ServiceName,Value=$SERVICE_NAME Name=ClusterName,Value=$CLUSTER_NAME \
+            --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) \
+            --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+            --period 300 \
+            --statistics Average,Maximum \
+            --query 'Datapoints' \
+            --output json)
+          
+          # Get Memory utilization
+          MEMORY_UTILIZATION=$(aws cloudwatch get-metric-statistics \
+            --namespace AWS/ECS \
+            --metric-name MemoryUtilization \
+            --dimensions Name=ServiceName,Value=$SERVICE_NAME Name=ClusterName,Value=$CLUSTER_NAME \
+            --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) \
+            --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+            --period 300 \
+            --statistics Average,Maximum \
+            --query 'Datapoints' \
+            --output json)
+          
+          # Create resource usage report
+          cat > resource-usage-report.json << EOF
+          {
+            "environment": "$ENVIRONMENT",
+            "service": "$SERVICE_NAME",
+            "cluster": "$CLUSTER_NAME",
+            "cpu_utilization": $CPU_UTILIZATION,
+            "memory_utilization": $MEMORY_UTILIZATION,
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%S)"
+          }
+          EOF
+          
+          echo "Resource Usage Report:"
+          cat resource-usage-report.json | jq .
+      
+      - name: Upload resource usage results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: resource-usage-results
+          path: resource-usage-report.json
+          retention-days: 30
+
+  # Generate performance report
+  generate-performance-report:
+    name: Generate Performance Report
+    runs-on: ubuntu-latest
+    needs: [setup-performance-test, api-performance-test, frontend-performance-test, database-performance-test, resource-usage-test]
+    if: always()
+    
+    steps:
+      - name: Download all performance results
+        uses: actions/download-artifact@v3
+        with:
+          path: performance-results
+      
+      - name: Generate comprehensive performance report
+        run: |
+          echo "# Performance Test Report" > performance-report.md
+          echo "Generated on: $(date)" >> performance-report.md
+          echo "" >> performance-report.md
+          
+          # Add test configuration
+          if [ -f performance-results/test-config/test-config.json ]; then
+            echo "## Test Configuration" >> performance-report.md
+            echo '```json' >> performance-report.md
+            cat performance-results/test-config/test-config.json >> performance-report.md
+            echo '```' >> performance-report.md
+            echo "" >> performance-report.md
+          fi
+          
+          echo "## Test Results Summary" >> performance-report.md
+          echo "- API Performance Test: ${{ needs.api-performance-test.result }}" >> performance-report.md
+          echo "- Frontend Performance Test: ${{ needs.frontend-performance-test.result }}" >> performance-report.md
+          echo "- Database Performance Test: ${{ needs.database-performance-test.result }}" >> performance-report.md
+          echo "- Resource Usage Test: ${{ needs.resource-usage-test.result }}" >> performance-report.md
+          echo "" >> performance-report.md
+          
+          # Add API performance results
+          if [ -f performance-results/api-performance-results/locust-results_stats.csv ]; then
+            echo "## API Performance Results" >> performance-report.md
+            echo "### Request Statistics" >> performance-report.md
+            echo '```' >> performance-report.md
+            head -20 performance-results/api-performance-results/locust-results_stats.csv >> performance-report.md
+            echo '```' >> performance-report.md
+            echo "" >> performance-report.md
+          fi
+          
+          # Add database performance results
+          if [ -f performance-results/database-performance-results/db-performance-results.json ]; then
+            echo "## Database Performance Results" >> performance-report.md
+            echo '```json' >> performance-report.md
+            cat performance-results/database-performance-results/db-performance-results.json >> performance-report.md
+            echo '```' >> performance-report.md
+            echo "" >> performance-report.md
+          fi
+          
+          # Add resource usage results
+          if [ -f performance-results/resource-usage-results/resource-usage-report.json ]; then
+            echo "## Resource Usage Results" >> performance-report.md
+            echo '```json' >> performance-report.md
+            cat performance-results/resource-usage-results/resource-usage-report.json >> performance-report.md
+            echo '```' >> performance-report.md
+            echo "" >> performance-report.md
+          fi
+          
+          echo "## Performance Recommendations" >> performance-report.md
+          echo "1. Monitor response times and optimize slow endpoints" >> performance-report.md
+          echo "2. Review database query performance and add indexes if needed" >> performance-report.md
+          echo "3. Consider scaling resources if utilization is consistently high" >> performance-report.md
+          echo "4. Implement caching for frequently accessed data" >> performance-report.md
+          echo "5. Optimize frontend bundle size and loading performance" >> performance-report.md
+          
+          cat performance-report.md
+      
+      - name: Upload performance report
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-report
+          path: performance-report.md
+          retention-days: 30
+      
+      - name: Check performance thresholds
+        run: |
+          echo "Checking performance thresholds..."
+          
+          PERFORMANCE_ISSUES=false
+          
+          # Check if any tests failed
+          if [ "${{ needs.api-performance-test.result }}" = "failure" ]; then
+            echo "⚠️ API performance test failed"
+            PERFORMANCE_ISSUES=true
+          fi
+          
+          if [ "${{ needs.frontend-performance-test.result }}" = "failure" ]; then
+            echo "⚠️ Frontend performance test failed"
+            PERFORMANCE_ISSUES=true
+          fi
+          
+          if [ "${{ needs.database-performance-test.result }}" = "failure" ]; then
+            echo "⚠️ Database performance test failed"
+            PERFORMANCE_ISSUES=true
+          fi
+          
+          if [ "$PERFORMANCE_ISSUES" = "true" ]; then
+            echo "performance_issues=true" >> $GITHUB_ENV
+          else
+            echo "✅ All performance tests passed"
+          fi
+
+  # Notify performance results
+  notify-performance-results:
+    name: Notify Performance Results
+    runs-on: ubuntu-latest
+    needs: [generate-performance-report]
+    if: always()
+    
+    steps:
+      - name: Notify success
+        if: needs.generate-performance-report.result == 'success' && env.performance_issues != 'true'
+        run: |
+          echo "✅ Performance tests completed successfully!"
+          echo "All performance metrics are within acceptable thresholds."
+      
+      - name: Notify performance issues
+        if: env.performance_issues == 'true'
+        run: |
+          echo "⚠️ Performance issues detected!"
+          echo "Some performance tests failed or metrics exceeded thresholds."
+          echo "Please review the performance report for details."
+      
+      - name: Create performance issue
+        if: env.performance_issues == 'true' && github.event_name == 'schedule'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '⚠️ Performance Issues Detected',
+              body: `Performance issues have been detected during automated testing.
+              
+              **Environment:** ${{ github.event.inputs.environment || 'staging' }}
+              **Test Type:** ${{ github.event.inputs.test_type || 'load' }}
+              
+              Please review the performance test results and take appropriate action:
+              1. Check the performance report in the workflow artifacts
+              2. Identify bottlenecks and optimization opportunities
+              3. Consider scaling resources if needed
+              4. Implement performance improvements
+              
+              **Workflow:** ${context.workflow}
+              **Run:** ${context.runNumber}`,
+              labels: ['performance', 'monitoring']
+            });

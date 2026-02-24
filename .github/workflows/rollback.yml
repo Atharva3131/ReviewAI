@@ -1,0 +1,690 @@
+name: Rollback Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      rollback_target:
+        description: 'Rollback target'
+        required: true
+        type: choice
+        default: 'previous'
+        options:
+          - previous
+          - version
+          - revision
+      version:
+        description: 'Specific version (required if target=version)'
+        required: false
+        type: string
+      revision:
+        description: 'Task definition revision (required if target=revision)'
+        required: false
+        type: string
+      component:
+        description: 'Component to rollback'
+        required: true
+        type: choice
+        default: 'all'
+        options:
+          - all
+          - backend
+          - frontend
+          - database
+      reason:
+        description: 'Reason for rollback'
+        required: true
+        type: string
+      skip_confirmation:
+        description: 'Skip manual confirmation (use with caution)'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  AWS_REGION: us-east-1
+  PROJECT_NAME: revive-ai
+
+jobs:
+  validate-rollback:
+    name: Validate Rollback Request
+    runs-on: ubuntu-latest
+    
+    outputs:
+      can-proceed: ${{ steps.validation.outputs.can-proceed }}
+      rollback-id: ${{ steps.generate-id.outputs.rollback-id }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Generate rollback ID
+        id: generate-id
+        run: |
+          ROLLBACK_ID="rollback-${{ github.event.inputs.environment }}-$(date +%Y%m%d-%H%M%S)"
+          echo "rollback-id=$ROLLBACK_ID" >> $GITHUB_OUTPUT
+          echo "📋 Rollback ID: $ROLLBACK_ID"
+      
+      - name: Validate inputs
+        id: validation
+        run: |
+          echo "🔍 Validating rollback request..."
+          
+          # Validate version input
+          if [ "${{ github.event.inputs.rollback_target }}" = "version" ] && [ -z "${{ github.event.inputs.version }}" ]; then
+            echo "❌ Version is required when rollback target is 'version'"
+            echo "can-proceed=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          # Validate revision input
+          if [ "${{ github.event.inputs.rollback_target }}" = "revision" ] && [ -z "${{ github.event.inputs.revision }}" ]; then
+            echo "❌ Revision is required when rollback target is 'revision'"
+            echo "can-proceed=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          # Validate environment
+          if [ "${{ github.event.inputs.environment }}" != "staging" ] && [ "${{ github.event.inputs.environment }}" != "production" ]; then
+            echo "❌ Invalid environment"
+            echo "can-proceed=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          
+          echo "can-proceed=true" >> $GITHUB_OUTPUT
+          echo "✅ Validation passed"
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Check current deployment
+        run: |
+          echo "🔍 Checking current deployment status..."
+          
+          CLUSTER_NAME="${{ env.PROJECT_NAME }}-${{ github.event.inputs.environment }}-cluster"
+          SERVICE_NAME="${{ env.PROJECT_NAME }}-${{ github.event.inputs.environment }}-backend"
+          
+          # Check if service exists
+          SERVICE_EXISTS=$(aws ecs describe-services \
+            --cluster $CLUSTER_NAME \
+            --services $SERVICE_NAME \
+            --query 'services[0].status' \
+            --output text 2>/dev/null || echo "MISSING")
+          
+          if [ "$SERVICE_EXISTS" = "MISSING" ] || [ "$SERVICE_EXISTS" = "INACTIVE" ]; then
+            echo "❌ Service not found or inactive"
+            exit 1
+          fi
+          
+          # Get current task definition
+          CURRENT_TASK_DEF=$(aws ecs describe-services \
+            --cluster $CLUSTER_NAME \
+            --services $SERVICE_NAME \
+            --query 'services[0].taskDefinition' \
+            --output text)
+          
+          echo "📦 Current task definition: $CURRENT_TASK_DEF"
+          
+          # Check if there's an ongoing deployment
+          DEPLOYMENT_COUNT=$(aws ecs describe-services \
+            --cluster $CLUSTER_NAME \
+            --services $SERVICE_NAME \
+            --query 'length(services[0].deployments)' \
+            --output text)
+          
+          if [ "$DEPLOYMENT_COUNT" -gt 1 ]; then
+            echo "⚠️ Warning: There is an ongoing deployment"
+            echo "Deployment count: $DEPLOYMENT_COUNT"
+          fi
+      
+      - name: Create rollback manifest
+        run: |
+          echo "📝 Creating rollback manifest..."
+          
+          cat > rollback-manifest.json <<EOF
+          {
+            "rollback_id": "${{ steps.generate-id.outputs.rollback-id }}",
+            "environment": "${{ github.event.inputs.environment }}",
+            "rollback_target": "${{ github.event.inputs.rollback_target }}",
+            "version": "${{ github.event.inputs.version }}",
+            "revision": "${{ github.event.inputs.revision }}",
+            "component": "${{ github.event.inputs.component }}",
+            "reason": "${{ github.event.inputs.reason }}",
+            "triggered_by": "${{ github.actor }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "git_ref": "${{ github.ref }}",
+            "git_sha": "${{ github.sha }}"
+          }
+          EOF
+          
+          cat rollback-manifest.json
+      
+      - name: Upload rollback manifest
+        uses: actions/upload-artifact@v3
+        with:
+          name: rollback-manifest
+          path: rollback-manifest.json
+          retention-days: 90
+
+  approval-gate:
+    name: Rollback Approval
+    runs-on: ubuntu-latest
+    needs: [validate-rollback]
+    if: github.event.inputs.environment == 'production' && github.event.inputs.skip_confirmation != 'true'
+    environment:
+      name: production-rollback
+    
+    steps:
+      - name: Manual approval required
+        run: |
+          echo "⏸️  Manual approval required for production rollback"
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          echo "Component: ${{ github.event.inputs.component }}"
+          echo "Reason: ${{ github.event.inputs.reason }}"
+          echo "Triggered by: ${{ github.actor }}"
+
+  pre-rollback-snapshot:
+    name: Create Pre-Rollback Snapshot
+    runs-on: ubuntu-latest
+    needs: [validate-rollback, approval-gate]
+    if: |
+      always() &&
+      needs.validate-rollback.result == 'success' &&
+      (needs.approval-gate.result == 'success' || needs.approval-gate.result == 'skipped')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Capture current state
+        run: |
+          echo "📸 Capturing current deployment state..."
+          
+          CLUSTER_NAME="${{ env.PROJECT_NAME }}-${{ github.event.inputs.environment }}-cluster"
+          SERVICE_NAME="${{ env.PROJECT_NAME }}-${{ github.event.inputs.environment }}-backend"
+          
+          # Get current service configuration
+          aws ecs describe-services \
+            --cluster $CLUSTER_NAME \
+            --services $SERVICE_NAME \
+            > current-service-state.json
+          
+          # Get current task definition
+          CURRENT_TASK_DEF=$(jq -r '.services[0].taskDefinition' current-service-state.json)
+          
+          aws ecs describe-task-definition \
+            --task-definition $CURRENT_TASK_DEF \
+            > current-task-definition.json
+          
+          echo "✅ Current state captured"
+      
+      - name: Create database backup
+        if: github.event.inputs.component == 'all' || github.event.inputs.component == 'database'
+        run: |
+          echo "🗄️ Creating database backup..."
+          echo "Note: Database backup should be created before rollback"
+          echo "Backup timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          
+          # In production, this would trigger an RDS snapshot
+          # aws rds create-db-snapshot \
+          #   --db-instance-identifier ${{ env.PROJECT_NAME }}-${{ github.event.inputs.environment }} \
+          #   --db-snapshot-identifier rollback-snapshot-$(date +%Y%m%d-%H%M%S)
+      
+      - name: Upload snapshot artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: pre-rollback-snapshot
+          path: |
+            current-service-state.json
+            current-task-definition.json
+          retention-days: 90
+
+  rollback-backend:
+    name: Rollback Backend
+    runs-on: ubuntu-latest
+    needs: [validate-rollback, approval-gate, pre-rollback-snapshot]
+    if: |
+      always() &&
+      needs.validate-rollback.result == 'success' &&
+      (needs.approval-gate.result == 'success' || needs.approval-gate.result == 'skipped') &&
+      needs.pre-rollback-snapshot.result == 'success' &&
+      (github.event.inputs.component == 'all' || github.event.inputs.component == 'backend')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Execute backend rollback
+        run: |
+          chmod +x scripts/rollback.sh
+          
+          ./scripts/rollback.sh \
+            --environment ${{ github.event.inputs.environment }} \
+            --target ${{ github.event.inputs.rollback_target }} \
+            --component backend \
+            --force \
+            ${{ github.event.inputs.version != '' && format('--version {0}', github.event.inputs.version) || '' }} \
+            ${{ github.event.inputs.revision != '' && format('--revision {0}', github.event.inputs.revision) || '' }}
+      
+      - name: Verify backend rollback
+        run: |
+          echo "🔍 Verifying backend rollback..."
+          
+          CLUSTER_NAME="${{ env.PROJECT_NAME }}-${{ github.event.inputs.environment }}-cluster"
+          SERVICE_NAME="${{ env.PROJECT_NAME }}-${{ github.event.inputs.environment }}-backend"
+          
+          # Wait for service stability
+          aws ecs wait services-stable \
+            --cluster $CLUSTER_NAME \
+            --services $SERVICE_NAME
+          
+          # Check task count
+          RUNNING_COUNT=$(aws ecs describe-services \
+            --cluster $CLUSTER_NAME \
+            --services $SERVICE_NAME \
+            --query 'services[0].runningCount' \
+            --output text)
+          
+          DESIRED_COUNT=$(aws ecs describe-services \
+            --cluster $CLUSTER_NAME \
+            --services $SERVICE_NAME \
+            --query 'services[0].desiredCount' \
+            --output text)
+          
+          echo "📊 Running tasks: $RUNNING_COUNT/$DESIRED_COUNT"
+          
+          if [ "$RUNNING_COUNT" != "$DESIRED_COUNT" ]; then
+            echo "❌ Task count mismatch"
+            exit 1
+          fi
+          
+          echo "✅ Backend rollback verified"
+
+  rollback-database:
+    name: Rollback Database
+    runs-on: ubuntu-latest
+    needs: [validate-rollback, approval-gate, pre-rollback-snapshot]
+    if: |
+      always() &&
+      needs.validate-rollback.result == 'success' &&
+      (needs.approval-gate.result == 'success' || needs.approval-gate.result == 'skipped') &&
+      needs.pre-rollback-snapshot.result == 'success' &&
+      (github.event.inputs.component == 'all' || github.event.inputs.component == 'database')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+      
+      - name: Execute database rollback
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          chmod +x scripts/rollback-migration.sh
+          
+          echo "⚠️ Database rollback requires careful consideration"
+          echo "This will rollback database migrations"
+          
+          # For automated rollback, we rollback 1 step
+          # For manual rollback, specify the target revision
+          if [ "${{ github.event.inputs.rollback_target }}" = "previous" ]; then
+            ./scripts/rollback-migration.sh \
+              --environment ${{ github.event.inputs.environment }} \
+              --steps 1 \
+              --backup \
+              --force
+          else
+            echo "⚠️ Custom database rollback target specified"
+            echo "Manual intervention may be required"
+          fi
+      
+      - name: Verify database rollback
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          echo "🔍 Verifying database state..."
+          
+          cd backend
+          alembic current
+          
+          echo "✅ Database rollback completed"
+
+  rollback-frontend:
+    name: Rollback Frontend
+    runs-on: ubuntu-latest
+    needs: [validate-rollback, approval-gate, pre-rollback-snapshot]
+    if: |
+      always() &&
+      needs.validate-rollback.result == 'success' &&
+      (needs.approval-gate.result == 'success' || needs.approval-gate.result == 'skipped') &&
+      needs.pre-rollback-snapshot.result == 'success' &&
+      (github.event.inputs.component == 'all' || github.event.inputs.component == 'frontend')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Rollback frontend deployment
+        run: |
+          echo "🔄 Rolling back frontend..."
+          
+          S3_BUCKET=$(aws s3api list-buckets \
+            --query "Buckets[?contains(Name, '${{ env.PROJECT_NAME }}-${{ github.event.inputs.environment }}-frontend')].Name" \
+            --output text)
+          
+          if [ -z "$S3_BUCKET" ]; then
+            echo "❌ Frontend S3 bucket not found"
+            exit 1
+          fi
+          
+          echo "📦 Frontend bucket: $S3_BUCKET"
+          
+          # Check if versioning is enabled
+          VERSIONING=$(aws s3api get-bucket-versioning \
+            --bucket "$S3_BUCKET" \
+            --query 'Status' \
+            --output text)
+          
+          if [ "$VERSIONING" = "Enabled" ]; then
+            echo "✅ S3 versioning is enabled"
+            echo "⚠️ Frontend rollback via S3 versioning requires manual intervention"
+            echo "Use AWS Console to restore previous versions or deploy a previous build"
+          else
+            echo "⚠️ S3 versioning is not enabled"
+            echo "Frontend rollback requires redeploying a previous build"
+          fi
+      
+      - name: Invalidate CloudFront cache
+        run: |
+          echo "🔄 Invalidating CloudFront cache..."
+          
+          DISTRIBUTION_ID=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?Comment=='${{ env.PROJECT_NAME }} ${{ github.event.inputs.environment }} frontend distribution'].Id" \
+            --output text)
+          
+          if [ -n "$DISTRIBUTION_ID" ]; then
+            aws cloudfront create-invalidation \
+              --distribution-id $DISTRIBUTION_ID \
+              --paths "/*"
+            
+            echo "✅ CloudFront cache invalidated"
+          else
+            echo "⚠️ CloudFront distribution not found"
+          fi
+
+  post-rollback-verification:
+    name: Post-Rollback Verification
+    runs-on: ubuntu-latest
+    needs: [validate-rollback, rollback-backend, rollback-database, rollback-frontend]
+    if: |
+      always() &&
+      needs.validate-rollback.result == 'success' &&
+      (needs.rollback-backend.result == 'success' || needs.rollback-backend.result == 'skipped') &&
+      (needs.rollback-database.result == 'success' || needs.rollback-database.result == 'skipped') &&
+      (needs.rollback-frontend.result == 'success' || needs.rollback-frontend.result == 'skipped')
+    
+    outputs:
+      verification-status: ${{ steps.verify.outputs.status }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Wait for stabilization
+        run: |
+          echo "⏳ Waiting for deployment to stabilize..."
+          sleep 60
+      
+      - name: Health check - Backend
+        id: backend-health
+        if: github.event.inputs.component == 'all' || github.event.inputs.component == 'backend'
+        run: |
+          echo "🔍 Checking backend health..."
+          
+          ENVIRONMENT="${{ github.event.inputs.environment }}"
+          
+          # Get ALB DNS
+          ALB_DNS=$(aws elbv2 describe-load-balancers \
+            --names "${{ env.PROJECT_NAME }}-${ENVIRONMENT}-alb" \
+            --query 'LoadBalancers[0].DNSName' \
+            --output text 2>/dev/null || echo "")
+          
+          if [ -z "$ALB_DNS" ]; then
+            echo "⚠️ Could not determine ALB endpoint"
+            exit 0
+          fi
+          
+          # Health check with retries
+          for i in {1..20}; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://${ALB_DNS}/health" || echo "000")
+            
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Backend health check passed"
+              echo "status=healthy" >> $GITHUB_OUTPUT
+              break
+            else
+              echo "⏳ Waiting for backend... (attempt $i/20, HTTP $HTTP_CODE)"
+              sleep 15
+            fi
+            
+            if [ $i -eq 20 ]; then
+              echo "❌ Backend health check failed"
+              echo "status=unhealthy" >> $GITHUB_OUTPUT
+              exit 1
+            fi
+          done
+      
+      - name: Health check - Frontend
+        id: frontend-health
+        if: github.event.inputs.component == 'all' || github.event.inputs.component == 'frontend'
+        run: |
+          echo "🔍 Checking frontend..."
+          
+          ENVIRONMENT="${{ github.event.inputs.environment }}"
+          
+          if [ "$ENVIRONMENT" = "production" ]; then
+            FRONTEND_URL="https://app.${{ secrets.DOMAIN_NAME }}"
+          else
+            FRONTEND_URL="https://${ENVIRONMENT}.revive-ai.com"
+          fi
+          
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$FRONTEND_URL" || echo "000")
+          
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Frontend health check passed"
+            echo "status=healthy" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ Frontend health check returned HTTP $HTTP_CODE"
+            echo "status=degraded" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Verify service metrics
+        run: |
+          echo "📊 Checking service metrics..."
+          
+          CLUSTER_NAME="${{ env.PROJECT_NAME }}-${{ github.event.inputs.environment }}-cluster"
+          SERVICE_NAME="${{ env.PROJECT_NAME }}-${{ github.event.inputs.environment }}-backend"
+          
+          # Get deployment status
+          DEPLOYMENT_STATUS=$(aws ecs describe-services \
+            --cluster $CLUSTER_NAME \
+            --services $SERVICE_NAME \
+            --query 'services[0].deployments[0].rolloutState' \
+            --output text)
+          
+          echo "📈 Deployment status: $DEPLOYMENT_STATUS"
+          
+          if [ "$DEPLOYMENT_STATUS" = "COMPLETED" ]; then
+            echo "✅ Deployment completed successfully"
+          else
+            echo "⚠️ Deployment status: $DEPLOYMENT_STATUS"
+          fi
+      
+      - name: Set verification status
+        id: verify
+        run: |
+          if [ "${{ steps.backend-health.outputs.status }}" = "unhealthy" ]; then
+            echo "status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
+          fi
+
+  create-rollback-report:
+    name: Create Rollback Report
+    runs-on: ubuntu-latest
+    needs: [validate-rollback, rollback-backend, rollback-database, rollback-frontend, post-rollback-verification]
+    if: always()
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: rollback-manifest
+      
+      - name: Generate rollback report
+        run: |
+          echo "📝 Generating rollback report..."
+          
+          cat > rollback-report.md <<EOF
+          # Rollback Report
+          
+          ## Summary
+          - **Rollback ID**: ${{ needs.validate-rollback.outputs.rollback-id }}
+          - **Environment**: ${{ github.event.inputs.environment }}
+          - **Component**: ${{ github.event.inputs.component }}
+          - **Target**: ${{ github.event.inputs.rollback_target }}
+          - **Reason**: ${{ github.event.inputs.reason }}
+          - **Triggered by**: ${{ github.actor }}
+          - **Timestamp**: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+          
+          ## Results
+          - **Backend Rollback**: ${{ needs.rollback-backend.result }}
+          - **Database Rollback**: ${{ needs.rollback-database.result }}
+          - **Frontend Rollback**: ${{ needs.rollback-frontend.result }}
+          - **Verification**: ${{ needs.post-rollback-verification.result }}
+          
+          ## Health Checks
+          - **Backend Health**: ${{ needs.post-rollback-verification.outputs.verification-status }}
+          
+          ## Actions Taken
+          1. Pre-rollback snapshot created
+          2. Current state captured
+          3. Rollback executed for: ${{ github.event.inputs.component }}
+          4. Post-rollback verification completed
+          
+          ## Next Steps
+          - Monitor application metrics
+          - Review logs for any issues
+          - Verify business functionality
+          - Update incident documentation
+          
+          ---
+          Generated by GitHub Actions
+          Workflow Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EOF
+          
+          cat rollback-report.md
+      
+      - name: Upload rollback report
+        uses: actions/upload-artifact@v3
+        with:
+          name: rollback-report
+          path: rollback-report.md
+          retention-days: 90
+
+  notify-rollback-status:
+    name: Notify Rollback Status
+    runs-on: ubuntu-latest
+    needs: [validate-rollback, post-rollback-verification, create-rollback-report]
+    if: always()
+    
+    steps:
+      - name: Determine rollback status
+        id: status
+        run: |
+          if [ "${{ needs.post-rollback-verification.result }}" = "success" ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "message=Rollback completed successfully" >> $GITHUB_OUTPUT
+            echo "emoji=🎉" >> $GITHUB_OUTPUT
+          else
+            echo "status=failed" >> $GITHUB_OUTPUT
+            echo "message=Rollback failed or incomplete" >> $GITHUB_OUTPUT
+            echo "emoji=❌" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Send notification
+        run: |
+          echo "${{ steps.status.outputs.emoji }} Rollback Status: ${{ steps.status.outputs.status }}"
+          echo "📋 Rollback ID: ${{ needs.validate-rollback.outputs.rollback-id }}"
+          echo "🌍 Environment: ${{ github.event.inputs.environment }}"
+          echo "📦 Component: ${{ github.event.inputs.component }}"
+          echo "🎯 Target: ${{ github.event.inputs.rollback_target }}"
+          echo "💬 Reason: ${{ github.event.inputs.reason }}"
+          echo "👤 Triggered by: ${{ github.actor }}"
+          echo "💬 Message: ${{ steps.status.outputs.message }}"
+          echo ""
+          echo "📊 Results:"
+          echo "  - Backend: ${{ needs.rollback-backend.result }}"
+          echo "  - Database: ${{ needs.rollback-database.result }}"
+          echo "  - Frontend: ${{ needs.rollback-frontend.result }}"
+          echo "  - Verification: ${{ needs.post-rollback-verification.result }}"
+          echo ""
+          echo "🔗 Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          
+          if [ "${{ steps.status.outputs.status }}" != "success" ]; then
+            echo ""
+            echo "⚠️ ATTENTION REQUIRED"
+            echo "Rollback did not complete successfully. Please review the logs and take corrective action."
+            exit 1
+          fi

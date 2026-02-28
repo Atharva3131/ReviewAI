@@ -104,7 +104,7 @@ jobs:
         continue-on-error: true
       
       - name: Upload Python security reports
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: python-security-reports
@@ -164,7 +164,7 @@ jobs:
         continue-on-error: true
       
       - name: Upload JavaScript security reports
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: javascript-security-reports
@@ -248,7 +248,7 @@ jobs:
         continue-on-error: true
       
       - name: Upload Docker security reports
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: docker-security-reports
@@ -319,7 +319,7 @@ jobs:
           category: 'tfsec'
       
       - name: Upload infrastructure security reports
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: infrastructure-security-reports
@@ -412,7 +412,7 @@ jobs:
         continue-on-error: true
       
       - name: Upload license reports
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: license-compliance-reports
@@ -430,7 +430,7 @@ jobs:
     
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
       
       - name: Generate security summary
         run: |
@@ -463,7 +463,7 @@ jobs:
           cat security-report.md
       
       - name: Upload security report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: security-report
           path: security-report.md

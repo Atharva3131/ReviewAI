@@ -118,7 +118,7 @@ jobs:
           cat deployment-manifest.json
       
       - name: Upload deployment manifest
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: deployment-manifest
           path: deployment-manifest.json
@@ -278,7 +278,7 @@ jobs:
           echo "📦 Frontend build hash: $BUILD_HASH"
       
       - name: Upload frontend build
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: frontend-build-${{ needs.pre-deployment-checks.outputs.deployment-id }}
           path: frontend/out/
@@ -337,7 +337,7 @@ jobs:
           cat ../../infrastructure-outputs.json
       
       - name: Upload infrastructure outputs
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: infrastructure-outputs
           path: infrastructure-outputs.json
@@ -361,7 +361,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       
       - name: Download infrastructure outputs
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: infrastructure-outputs
       
@@ -451,7 +451,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       
       - name: Download frontend build
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: frontend-build-${{ needs.pre-deployment-checks.outputs.deployment-id }}
           path: frontend-build

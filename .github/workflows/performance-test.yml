@@ -92,7 +92,7 @@ jobs:
           cat test-config.json | jq .
       
       - name: Upload test configuration
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: test-config
           path: test-config.json
@@ -240,7 +240,7 @@ jobs:
             --headless
       
       - name: Upload Locust results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: api-performance-results
@@ -310,7 +310,7 @@ jobs:
         continue-on-error: true
       
       - name: Upload Lighthouse results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: frontend-performance-results
@@ -457,7 +457,7 @@ jobs:
         continue-on-error: true
       
       - name: Upload database performance results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: database-performance-results
@@ -526,7 +526,7 @@ jobs:
           cat resource-usage-report.json | jq .
       
       - name: Upload resource usage results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: resource-usage-results
@@ -542,7 +542,7 @@ jobs:
     
     steps:
       - name: Download all performance results
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: performance-results
       
@@ -606,7 +606,7 @@ jobs:
           cat performance-report.md
       
       - name: Upload performance report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: performance-report
           path: performance-report.md

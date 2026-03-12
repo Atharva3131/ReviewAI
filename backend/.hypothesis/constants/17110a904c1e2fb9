@@ -1,0 +1,4 @@
+# file: C:\Users\Atharva\Documents\AI_REVIEW_AGENT\backend\app\services\llm\openai_provider.py
+# hypothesis_version: 6.151.9
+
+[0.001, 0.0015, 0.002, 0.01, 0.03, 0.05, 0.06, 0.1, 150, 1000, 4096, 8192, 128000, 'USD', 'api_key', 'apolog', 'authentication', 'base_url', 'completion_tokens', 'content', 'cost_per_1k_tokens', 'currency', 'customer', 'discount', 'email', 'finish_reason', 'id', 'input', 'input_cost', 'input_tokens', 'max_tokens', 'model_version', 'offer', 'organization', 'output', 'output_cost', 'output_tokens', 'prompt_tokens', 'provider_response_id', 'rate_limit', 'recovery', 'respond', 'review', 'sk-', 'stop', 'timeout', 'total_cost', 'total_tokens', 'usage']

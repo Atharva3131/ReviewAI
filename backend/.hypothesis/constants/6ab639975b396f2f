@@ -1,0 +1,4 @@
+# file: C:\Users\Atharva\Documents\AI_REVIEW_AGENT\backend\app\services\llm\provider_factory.py
+# hypothesis_version: 6.151.9
+
+['0.05', '0.1', '30', 'DEFAULT_LLM_PROVIDER', 'GEMINI_API_KEY', 'GEMINI_ENABLED', 'GEMINI_TIMEOUT', 'MISTRAL_API_KEY', 'MOCK_ENABLED', 'MOCK_ERROR_RATE', 'MOCK_RESPONSE_DELAY', 'MOCK_SIMULATE_ERRORS', 'OPENAI_API_KEY', 'OPENAI_ORGANIZATION', 'OPENAI_TIMEOUT', 'api_key', 'available_providers', 'cached_instances', 'config_keys', 'default_provider', 'enabled', 'enabled_providers', 'error', 'error_rate', 'fallback_provider', 'false', 'is_default', 'is_fallback', 'organization', 'provider', 'response_delay', 'simulate_errors', 'status', 'test_successful', 'timeout', 'total_provider_types', 'true', 'use_mistral']

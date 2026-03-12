@@ -1,0 +1,4 @@
+# file: C:\Users\Atharva\Documents\AI_REVIEW_AGENT\backend\app\services\llm\mock_provider.py
+# hypothesis_version: 6.151.9
+
+[0.0, 0.02, 0.05, 0.1, 0.3, 0.8, 1.0, 4096, 'apolog', 'apology', 'completion_tokens', 'customer', 'email', 'error_rate', 'generic', 'mock', 'mock_provider', 'prompt_tokens', 'provider', 'recovery', 'recovery_email', 'respond', 'response_delay', 'review', 'review_response', 'simulate_errors', 'sorry', 'stop', 'supported_models', 'template_types', 'template_used', 'total_tokens']

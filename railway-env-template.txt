@@ -1,0 +1,34 @@
+# Railway Environment Variables Template
+# Copy these to your Railway dashboard under Variables
+
+# Backend Service Variables
+DATABASE_URL=postgresql://user:password@host:port/database
+REDIS_URL=redis://user:password@host:port
+SECRET_KEY=your-32-character-secret-key-here
+MASTER_ENCRYPTION_KEY=your-32-character-encryption-key
+MISTRAL_API_KEY=your-mistral-api-key-here
+ENVIRONMENT=production
+DEBUG=false
+LOG_LEVEL=INFO
+API_V1_STR=/api/v1
+PROJECT_NAME=Revive AI
+ALLOWED_HOSTS=https://your-frontend-url.railway.app,https://your-backend-url.railway.app
+
+# Optional LLM Provider Keys
+OPENAI_API_KEY=sk-your-openai-api-key-here
+GEMINI_API_KEY=your-gemini-api-key-here
+
+# Frontend Service Variables
+NEXT_PUBLIC_API_URL=https://your-backend-url.railway.app
+
+# Database Configuration (if using Railway PostgreSQL)
+PGHOST=your-railway-postgres-host
+PGPORT=5432
+PGDATABASE=railway
+PGUSER=postgres
+PGPASSWORD=your-railway-postgres-password
+
+# Redis Configuration (if using Railway Redis)
+REDISHOST=your-railway-redis-host
+REDISPORT=6379
+REDISPASSWORD=your-railway-redis-password

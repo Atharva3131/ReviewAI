@@ -1,0 +1,4 @@
+# file: C:\Users\Atharva\Documents\AI_REVIEW_AGENT\backend\app\services\llm\mistral_provider.py
+# hypothesis_version: 6.151.9
+
+[0.05, 0.1, 0.25, 0.7, 1.0, 2.0, 2.7, 3.0, 4.0, 6.0, 8.1, 12.0, 150, 32000, 64000, 1000000, 'USD', 'api_key', 'apolog', 'authentication', 'base_url', 'completion_tokens', 'content', 'cost_per_1m_tokens', 'currency', 'customer', 'default_model', 'discount', 'email', 'finish_reason', 'id', 'input', 'input_cost', 'input_tokens', 'max_tokens', 'mistral', 'mistral-large-latest', 'mistral-small-latest', 'model', 'model_version', 'offer', 'open-mistral-7b', 'open-mixtral-8x22b', 'open-mixtral-8x7b', 'output', 'output_cost', 'output_tokens', 'prompt_tokens', 'provider', 'provider_response_id', 'rate_limit', 'recovery', 'respond', 'review', 'stop', 'timeout', 'total_cost', 'total_tokens', 'unauthorized', 'usage']

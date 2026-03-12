@@ -3,7 +3,8 @@ Security configuration and settings for Revive AI
 """
 import os
 from typing import Dict, List, Optional
-from pydantic import BaseSettings, field_validator
+from pydantic import field_validator
+from pydantic_settings import BaseSettings
 from enum import Enum
 
 

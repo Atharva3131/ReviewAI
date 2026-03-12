@@ -12,6 +12,7 @@ alembic==1.14.0
 
 # Authentication
 python-jose[cryptography]==3.3.0
+pyjwt==2.8.0
 passlib[bcrypt]==1.7.4
 python-multipart==0.0.20
 
@@ -43,30 +44,25 @@ cryptography==44.0.0
 python-dotenv==1.0.1
 email-validator==2.2.0
 
-# Development
-pytest==8.3.4
-pytest-asyncio==0.24.0
-hypothesis==6.122.3
-pytest-mock==3.14.0
-black==24.10.0
-isort==5.13.2
-flake8==7.1.1
-
 # Payment processing
 stripe==11.3.0
 
+# Core Python packages
 greenlet==3.3.2
-pytest-cov==6.0.0
-pytest-html==4.1.1
-pytest-json-report==1.5.0
-pytest-xdist==3.6.1
-bandit==1.8.0
-safety==3.2.11
 
-# Test coverage and reporting
+# Development and Testing
+pytest==8.3.4
+pytest-asyncio==0.24.0
 pytest-cov==6.0.0
 pytest-html==4.1.1
 pytest-json-report==1.5.0
 pytest-xdist==3.6.1
+pytest-mock==3.14.0
+hypothesis==6.122.3
+
+# Code Quality
+black==24.10.0
+isort==5.13.2
+flake8==7.1.1
 bandit==1.8.0
 safety==3.2.11

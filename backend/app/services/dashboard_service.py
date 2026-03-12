@@ -672,3 +672,6 @@ class KPICalculationService:
             "failed_actions": failed_actions,
             "pending_actions": pending_actions
         }
+
+# Alias for backward compatibility
+DashboardService = DashboardMetricsService

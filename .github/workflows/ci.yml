@@ -72,8 +72,10 @@ jobs:
           OPENAI_API_KEY: test-openai-key
           GEMINI_API_KEY: test-gemini-key
           ENVIRONMENT: testing
+          PYTHONPATH: /home/runner/work/Review-AI/Review-AI/backend
         run: |
           cd backend
+          export PYTHONPATH=$PWD:$PYTHONPATH
           python run_tests.py ci
       
       - name: Upload test results

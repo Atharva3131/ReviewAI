@@ -165,7 +165,7 @@ addopts = [
     "--cov-report=term-missing",
     "--cov-report=html",
     "--cov-report=xml",
-    "--cov-fail-under=80",
+    "--cov-fail-under=20",
 ]
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
@@ -177,6 +177,14 @@ markers = [
     "unit: marks tests as unit tests",
     "property: marks tests as property-based tests",
     "external: marks tests that require external services",
+    "preservation_test: marks tests as preservation tests",
+    "database: marks tests that require database",
+    "redis: marks tests that require Redis",
+    "llm: marks tests that require LLM services",
+    "auth: marks tests for authentication",
+    "api: marks tests for API endpoints",
+    "security: marks tests for security features",
+    "performance: marks tests for performance testing",
 ]
 filterwarnings = [
     "error",

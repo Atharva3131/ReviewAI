@@ -385,30 +385,30 @@ jobs:
           cd frontend
           npm audit --audit-level=high
 
-  # Code Quality
-  code-quality:
-    name: Code Quality
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Shallow clones should be disabled for better analysis
-      
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          args: >
-            -Dsonar.projectKey=revive-ai
-            -Dsonar.organization=your-org
-            -Dsonar.sources=backend/app,frontend/src
-            -Dsonar.tests=backend/tests,frontend/src
-            -Dsonar.python.coverage.reportPaths=backend/coverage.xml
-            -Dsonar.javascript.lcov.reportPaths=frontend/coverage/lcov.info
+  # Code Quality (Temporarily disabled - requires SonarCloud setup)
+  # code-quality:
+  #   name: Code Quality
+  #   runs-on: ubuntu-latest
+  #   
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 0  # Shallow clones should be disabled for better analysis
+  #     
+  #     - name: SonarCloud Scan
+  #       uses: SonarSource/sonarcloud-github-action@master
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  #       with:
+  #         args: >
+  #           -Dsonar.projectKey=revive-ai
+  #           -Dsonar.organization=your-org
+  #           -Dsonar.sources=backend/app,frontend/src
+  #           -Dsonar.tests=backend/tests,frontend/src
+  #           -Dsonar.python.coverage.reportPaths=backend/coverage.xml
+  #           -Dsonar.javascript.lcov.reportPaths=frontend/coverage/lcov.info
 
   # Build Docker Images (for testing)
   build-test:
@@ -447,7 +447,7 @@ jobs:
   notify:
     name: Notify Results
     runs-on: ubuntu-latest
-    needs: [backend-test, frontend-test, property-based-tests, integration-tests, security-scan, code-quality, build-test]
+    needs: [backend-test, frontend-test, property-based-tests, integration-tests, security-scan, build-test]
     if: always()
     
     steps:
@@ -460,7 +460,6 @@ jobs:
           echo "Property-based tests: ${{ needs.property-based-tests.result }}"
           echo "Integration tests: ${{ needs.integration-tests.result }}"
           echo "Security scan: ${{ needs.security-scan.result }}"
-          echo "Code quality: ${{ needs.code-quality.result }}"
           echo "Build test: ${{ needs.build-test.result }}"
       
       - name: Notify Failure
@@ -472,6 +471,5 @@ jobs:
           echo "Property-based tests: ${{ needs.property-based-tests.result }}"
           echo "Integration tests: ${{ needs.integration-tests.result }}"
           echo "Security scan: ${{ needs.security-scan.result }}"
-          echo "Code quality: ${{ needs.code-quality.result }}"
           echo "Build test: ${{ needs.build-test.result }}"
           exit 1

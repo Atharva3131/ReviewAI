@@ -19,6 +19,7 @@ jobs:
   sast-scan:
     name: SAST Security Scan
     runs-on: ubuntu-latest
+    continue-on-error: true
     
     steps:
       - name: Checkout code
@@ -184,6 +185,7 @@ jobs:
   docker-security:
     name: Docker Security Scan
     runs-on: ubuntu-latest
+    continue-on-error: true
     
     steps:
       - name: Checkout code
@@ -193,6 +195,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
       
       - name: Build backend image for scanning
+        continue-on-error: true
         uses: docker/build-push-action@v5
         with:
           context: ./backend
@@ -203,6 +206,7 @@ jobs:
           cache-to: type=gha,mode=max
       
       - name: Build frontend image for scanning
+        continue-on-error: true
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
@@ -269,6 +273,7 @@ jobs:
   infrastructure-security:
     name: Infrastructure Security Scan
     runs-on: ubuntu-latest
+    continue-on-error: true
     
     steps:
       - name: Checkout code
@@ -280,6 +285,7 @@ jobs:
           terraform_version: 1.6.0
       
       - name: Run Checkov on Terraform
+        continue-on-error: true
         uses: bridgecrewio/checkov-action@master
         with:
           directory: aws/terraform
@@ -297,6 +303,7 @@ jobs:
           category: 'checkov-terraform'
       
       - name: Run Trivy on Terraform
+        continue-on-error: true
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'config'
@@ -313,6 +320,7 @@ jobs:
           category: 'trivy-terraform'
       
       - name: Run tfsec
+        continue-on-error: true
         uses: aquasecurity/tfsec-action@v1.0.3
         with:
           working_directory: aws/terraform

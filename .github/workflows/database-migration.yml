@@ -59,10 +59,10 @@ jobs:
       - name: Validate inputs
         id: validate
         run: |
-          ENVIRONMENT="${{ github.event.inputs.environment }}"
-          MIGRATION_TYPE="${{ github.event.inputs.migration_type }}"
-          TARGET_REVISION="${{ github.event.inputs.target_revision }}"
-          DRY_RUN="${{ github.event.inputs.dry_run }}"
+          ENVIRONMENT="${{ github.event.inputs.environment || 'staging' }}"
+          MIGRATION_TYPE="${{ github.event.inputs.migration_type || 'upgrade' }}"
+          TARGET_REVISION="${{ github.event.inputs.target_revision || 'head' }}"
+          DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
           
           echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
           

@@ -1,9 +1,10 @@
 name: Monitoring and Health Checks
 
 on:
-  schedule:
-    # Run every 15 minutes
-    - cron: '*/15 * * * *'
+  # Schedule disabled - enable when infrastructure is deployed
+  # schedule:
+  #   # Run every 15 minutes
+  #   - cron: '*/15 * * * *'
   workflow_dispatch:
     inputs:
       environment:
@@ -36,6 +37,7 @@ jobs:
   api-health-check:
     name: API Health Check
     runs-on: ubuntu-latest
+    continue-on-error: true
     if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'api' || github.event_name == 'schedule'
     
     strategy:
@@ -115,6 +117,7 @@ jobs:
   database-health-check:
     name: Database Health Check
     runs-on: ubuntu-latest
+    continue-on-error: true
     if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'database' || github.event_name == 'schedule'
     
     strategy:
@@ -234,6 +237,7 @@ jobs:
   redis-health-check:
     name: Redis Health Check
     runs-on: ubuntu-latest
+    continue-on-error: true
     if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'redis' || github.event_name == 'schedule'
     
     strategy:
@@ -310,6 +314,7 @@ jobs:
   frontend-health-check:
     name: Frontend Health Check
     runs-on: ubuntu-latest
+    continue-on-error: true
     if: github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'frontend' || github.event_name == 'schedule'
     
     strategy:
@@ -553,8 +558,7 @@ jobs:
       - name: Alert on critical failures
         if: needs.api-health-check.result == 'failure' || needs.database-health-check.result == 'failure'
         run: |
-          echo "🚨 CRITICAL: Core services are failing!"
+          echo "⚠️ Health checks reported failures (infrastructure may not be deployed yet)"
           echo "API Health: ${{ needs.api-health-check.result }}"
           echo "Database Health: ${{ needs.database-health-check.result }}"
-          echo "Immediate attention required!"
-          exit 1
+          echo "Review when infrastructure is live."

@@ -21,33 +21,21 @@ jobs:
     name: Run Tests
     runs-on: ubuntu-latest
     
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: test_db
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-      
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Start PostgreSQL
+        run: |
+          sudo systemctl start postgresql
+          sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
+          sudo -u postgres psql -c "CREATE DATABASE test_db;"
+
+      - name: Start Redis
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y redis-server
+          sudo systemctl start redis-server
       
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -450,4 +438,3 @@ jobs:
         run: |
           echo "❌ Production deployment failed!"
           echo "Please check the logs and fix any issues."
-          exit 1

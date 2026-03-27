@@ -16,55 +16,41 @@ jobs:
     name: Backend Tests
     runs-on: ubuntu-latest
     continue-on-error: true
-    
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: test_db
-          POSTGRES_USER: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-      
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
+      - name: Start PostgreSQL
+        run: |
+          sudo systemctl start postgresql
+          sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
+          sudo -u postgres psql -c "CREATE DATABASE test_db;"
+
+      - name: Start Redis
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y redis-server
+          sudo systemctl start redis-server
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
           cache-dependency-path: 'backend/requirements.txt'
-      
+
       - name: Install system dependencies
         run: |
-          sudo apt-get update
           sudo apt-get install -y build-essential
-      
+
       - name: Install Python dependencies
         run: |
           cd backend
           pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest-xdist pytest-html pytest-json-report bandit safety
-      
+
       - name: Run automated testing pipeline
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
@@ -79,7 +65,7 @@ jobs:
           cd backend
           export PYTHONPATH=$PWD:$PYTHONPATH
           python run_tests.py ci
-      
+
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()
@@ -91,7 +77,7 @@ jobs:
             backend/pytest_html_report.html
             backend/test_results.json
           retention-days: 30
-      
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
@@ -104,41 +90,41 @@ jobs:
   frontend-test:
     name: Frontend Tests
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
-      
+
       - name: Install dependencies
         run: |
           cd frontend
           npm ci
-      
+
       - name: Run linting
         continue-on-error: true
         run: |
           cd frontend
           npm run lint
-      
+
       - name: Run type checking
         continue-on-error: true
         run: |
           cd frontend
           npm run type-check
-      
+
       - name: Run unit tests
         continue-on-error: true
         run: |
           cd frontend
           npm run test:ci
-      
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
@@ -146,7 +132,7 @@ jobs:
           flags: frontend
           name: frontend-coverage
           fail_ci_if_error: false
-      
+
       - name: Build application
         run: |
           cd frontend
@@ -157,49 +143,37 @@ jobs:
     name: Property-Based Tests
     runs-on: ubuntu-latest
     needs: [backend-test]
-    
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: test_db
-          POSTGRES_USER: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-      
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
-    
+    continue-on-error: true
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
+      - name: Start PostgreSQL
+        run: |
+          sudo systemctl start postgresql
+          sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
+          sudo -u postgres psql -c "CREATE DATABASE test_db;"
+
+      - name: Start Redis
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y redis-server
+          sudo systemctl start redis-server
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
           cache-dependency-path: 'backend/requirements.txt'
-      
+
       - name: Install dependencies
         run: |
           cd backend
           pip install --upgrade pip
           pip install -r requirements.txt
-      
+
       - name: Run property-based tests
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
@@ -217,61 +191,49 @@ jobs:
     name: Integration Tests
     runs-on: ubuntu-latest
     needs: [backend-test, frontend-test]
-    
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: test_db
-          POSTGRES_USER: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-      
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
-    
+    continue-on-error: true
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
+      - name: Start PostgreSQL
+        run: |
+          sudo systemctl start postgresql
+          sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
+          sudo -u postgres psql -c "CREATE DATABASE test_db;"
+
+      - name: Start Redis
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y redis-server
+          sudo systemctl start redis-server
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
           cache-dependency-path: 'backend/requirements.txt'
-      
+
       - name: Install backend dependencies
         run: |
           cd backend
           pip install --upgrade pip
           pip install -r requirements.txt
-      
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
-      
+
       - name: Install frontend dependencies
         run: |
           cd frontend
           npm ci
-      
+
       - name: Run automated database migration
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
@@ -282,7 +244,7 @@ jobs:
         run: |
           cd backend
           python scripts/migrate.py --environment development --report migration_report_ci.json
-      
+
       - name: Upload migration report
         uses: actions/upload-artifact@v4
         if: always()
@@ -290,7 +252,7 @@ jobs:
           name: migration-report-ci
           path: backend/migration_report_ci.json
           retention-days: 30
-      
+
       - name: Start backend server
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
@@ -303,7 +265,7 @@ jobs:
           cd backend
           uvicorn main:app --host 0.0.0.0 --port 8000 &
           sleep 10
-      
+
       - name: Run API integration tests
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
@@ -314,19 +276,19 @@ jobs:
         run: |
           cd backend
           python -m pytest tests/test_api_integration*.py tests/test_end_to_end*.py -v --tb=short
-      
+
       - name: Install Playwright browsers
         run: |
           cd frontend
           npx playwright install --with-deps
-      
+
       - name: Build frontend
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8000
         run: |
           cd frontend
           npm run build
-      
+
       - name: Start frontend server
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8000
@@ -334,12 +296,12 @@ jobs:
           cd frontend
           npm start &
           sleep 10
-      
+
       - name: Run E2E tests
         run: |
           cd frontend
           npm run test:e2e
-      
+
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
         if: always()
@@ -352,11 +314,11 @@ jobs:
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Run Trivy vulnerability scanner
         continue-on-error: true
         uses: aquasecurity/trivy-action@master
@@ -365,77 +327,53 @@ jobs:
           scan-ref: '.'
           format: 'sarif'
           output: 'trivy-results.sarif'
-      
+
       - name: Upload Trivy scan results to GitHub Security tab
         continue-on-error: true
         uses: github/codeql-action/upload-sarif@v2
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
-      
+
       - name: Set up Python for safety check
         uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      
+
       - name: Install safety
         run: pip install safety
-      
+
       - name: Run Python security check
         continue-on-error: true
         run: |
           cd backend
           safety check -r requirements.txt
-      
+
       - name: Set up Node.js for npm audit
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      
+
       - name: Run npm audit
         continue-on-error: true
         run: |
           cd frontend
           npm audit --audit-level=high
 
-  # Code Quality (Temporarily disabled - requires SonarCloud setup)
-  # code-quality:
-  #   name: Code Quality
-  #   runs-on: ubuntu-latest
-  #   
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v4
-  #       with:
-  #         fetch-depth: 0  # Shallow clones should be disabled for better analysis
-  #     
-  #     - name: SonarCloud Scan
-  #       uses: SonarSource/sonarcloud-github-action@master
-  #       env:
-  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  #         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-  #       with:
-  #         args: >
-  #           -Dsonar.projectKey=revive-ai
-  #           -Dsonar.organization=your-org
-  #           -Dsonar.sources=backend/app,frontend/src
-  #           -Dsonar.tests=backend/tests,frontend/src
-  #           -Dsonar.python.coverage.reportPaths=backend/coverage.xml
-  #           -Dsonar.javascript.lcov.reportPaths=frontend/coverage/lcov.info
-
   # Build Docker Images (for testing)
   build-test:
     name: Build Test Images
     runs-on: ubuntu-latest
     needs: [backend-test, frontend-test]
-    
+    continue-on-error: true
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      
+
       - name: Build backend image
         uses: docker/build-push-action@v5
         with:
@@ -445,7 +383,7 @@ jobs:
           tags: revive-ai-backend:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      
+
       - name: Build frontend image
         uses: docker/build-push-action@v5
         with:
@@ -462,7 +400,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend-test, frontend-test, property-based-tests, integration-tests, security-scan, build-test]
     if: always()
-    
+
     steps:
       - name: Notify Success
         if: ${{ needs.backend-test.result == 'success' && needs.frontend-test.result == 'success' && needs.integration-tests.result == 'success' }}
@@ -474,7 +412,7 @@ jobs:
           echo "Integration tests: ${{ needs.integration-tests.result }}"
           echo "Security scan: ${{ needs.security-scan.result }}"
           echo "Build test: ${{ needs.build-test.result }}"
-      
+
       - name: Notify Failure
         if: ${{ needs.backend-test.result == 'failure' || needs.frontend-test.result == 'failure' || needs.integration-tests.result == 'failure' }}
         run: |

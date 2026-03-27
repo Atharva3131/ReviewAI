@@ -123,20 +123,20 @@ class SecuritySettings(BaseSettings):
         env_prefix = "SECURITY_"
         env_file = ".env"
     
-    @field_validator("SECURITY_LEVEL", pre=True)
+    @field_validator("SECURITY_LEVEL", mode="before")
     def validate_security_level(cls, v):
         if isinstance(v, str):
             return SecurityLevel(v.lower())
         return v
     
-    @field_validator("IP_WHITELIST", "IP_BLACKLIST", pre=True)
+    @field_validator("IP_WHITELIST", "IP_BLACKLIST", mode="before")
     def validate_ip_lists(cls, v):
         if isinstance(v, str):
             return [ip.strip() for ip in v.split(",") if ip.strip()]
         return v or []
     
     @field_validator("CSP_DEFAULT_SRC", "CSP_SCRIPT_SRC", "CSP_STYLE_SRC", "CSP_IMG_SRC", 
-              "CSP_FONT_SRC", "CSP_CONNECT_SRC", pre=True)
+              "CSP_FONT_SRC", "CSP_CONNECT_SRC", mode="before")
     def validate_csp_lists(cls, v):
         if isinstance(v, str):
             return [item.strip() for item in v.split(",") if item.strip()]

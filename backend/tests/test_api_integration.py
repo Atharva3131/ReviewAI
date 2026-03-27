@@ -15,6 +15,12 @@ from typing import Dict, Any, List
 import json
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.user import User
+from app.models.customer import Customer
+from app.models.organization import Organization
+from app.models.review import Review
 
 # Mock the FastAPI app and dependencies for testing
 class MockApp:
@@ -123,6 +129,59 @@ class TestAPIIntegration:
             "urgency_level": "low",
             "issue_categories": ["quality"]
         }
+
+    @pytest.fixture
+    async def test_organization(self, db_session: AsyncSession):
+        """Create test organization"""
+        org = Organization(
+            id=uuid.uuid4(),
+            name="Test Organization",
+            domain="test.com",
+            settings={"test": True}
+        )
+        db_session.add(org)
+        await db_session.commit()
+        await db_session.refresh(org)
+        return org
+
+    @pytest.fixture
+    async def test_user(self, db_session: AsyncSession, test_organization: Organization):
+        """Create test user"""
+        from app.core.security import SecurityService
+        user = User(
+            id=uuid.uuid4(),
+            email="test@test.com",
+            hashed_password=SecurityService.get_password_hash("testpass123"),
+            first_name="Test",
+            last_name="User",
+            role="admin",
+            organization_id=test_organization.id,
+            is_active=True,
+            is_verified=True
+        )
+        db_session.add(user)
+        await db_session.commit()
+        await db_session.refresh(user)
+        return user
+
+    @pytest.fixture
+    async def db_session(self, mock_db_session):
+        """Provide mock database session as db_session"""
+        return mock_db_session
+
+    @pytest.fixture
+    def app_fixture(self):
+        """Provide real FastAPI app for integration tests"""
+        from app.main import app
+        return app
+
+    @pytest.fixture
+    async def async_client(self, app_fixture):
+        """Provide an AsyncClient for testing the FastAPI app"""
+        from httpx import ASGITransport, AsyncClient
+        transport = ASGITransport(app=app_fixture)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            yield client
 
 
 class TestAuthenticationAPI(TestAPIIntegration):

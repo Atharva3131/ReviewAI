@@ -528,7 +528,7 @@ def sanitize_string_validator(max_length: int = None, allow_html: bool = False):
         if v is None:
             return v
         return InputSanitizer.sanitize_string(v, max_length=max_length, allow_html=allow_html)
-    return validator('*', pre=True, allow_reuse=True)(validator_func)
+    return field_validator('*', mode='before', allow_reuse=True)(validator_func)
 
 
 def sanitize_email_validator():
@@ -537,7 +537,7 @@ def sanitize_email_validator():
         if v is None:
             return v
         return InputSanitizer.sanitize_email(v)
-    return validator('*', pre=True, allow_reuse=True)(validator_func)
+    return field_validator('*', mode='before', allow_reuse=True)(validator_func)
 
 
 def sanitize_url_validator(allowed_schemes: List[str] = None):
@@ -546,4 +546,4 @@ def sanitize_url_validator(allowed_schemes: List[str] = None):
         if v is None:
             return v
         return InputSanitizer.sanitize_url(v, allowed_schemes=allowed_schemes)
-    return validator('*', pre=True, allow_reuse=True)(validator_func)
+    return field_validator('*', mode='before', allow_reuse=True)(validator_func)

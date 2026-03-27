@@ -1,22 +1,25 @@
 """
 Agent decision schemas for request/response validation
 """
-from pydantic import BaseModel, Field, field_validator
-from typing import Optional, Dict, Any, List
+
 from datetime import datetime
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
-from app.models.agent_decision import InputType, DecisionType, DecisionStatus
+from pydantic import BaseModel, Field, field_validator
+
+from app.models.agent_decision import DecisionStatus, DecisionType, InputType
 
 
 class AgentDecisionRequest(BaseModel):
     """Request schema for agent decision"""
+
     input_type: str = Field(..., pattern="^(review|support_ticket|customer_profile)$")
     input_id: str
     context: Optional[Dict[str, Any]] = None
     business_rules: Optional[Dict[str, Any]] = None
-    
-    @field_validator('input_id')
+
+    @field_validator("input_id")
     def validate_input_id(cls, v):
         """Validate input ID format"""
         if not v or not v.strip():
@@ -26,6 +29,7 @@ class AgentDecisionRequest(BaseModel):
 
 class AgentDecisionResponse(BaseModel):
     """Response schema for agent decision"""
+
     decision_id: str
     input_type: str
     input_id: str
@@ -46,17 +50,18 @@ class AgentDecisionResponse(BaseModel):
     model_version: Optional[str]
     model_provider: Optional[str]
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
 
 class AgentDecisionValidationRequest(BaseModel):
     """Request schema for decision validation"""
+
     action: str = Field(..., pattern="^(approve|reject)$")
     notes: Optional[str] = Field(None, max_length=1000)
-    
-    @field_validator('notes')
+
+    @field_validator("notes")
     def validate_notes(cls, v):
         """Validate notes"""
         if v and len(v.strip()) == 0:
@@ -66,6 +71,7 @@ class AgentDecisionValidationRequest(BaseModel):
 
 class AgentDecisionExecutionRequest(BaseModel):
     """Request schema for decision execution"""
+
     execution_context: Optional[Dict[str, Any]] = None
     notify_customer: bool = True
     schedule_followup: bool = False
@@ -74,6 +80,7 @@ class AgentDecisionExecutionRequest(BaseModel):
 
 class AgentDecisionExecutionResponse(BaseModel):
     """Response schema for decision execution"""
+
     decision_id: str
     execution_status: str
     executed_at: Optional[datetime]
@@ -84,7 +91,10 @@ class AgentDecisionExecutionResponse(BaseModel):
 
 class AgentDecisionFilter(BaseModel):
     """Filter schema for agent decisions"""
-    input_type: Optional[str] = Field(None, pattern="^(review|support_ticket|customer_profile)$")
+
+    input_type: Optional[str] = Field(
+        None, pattern="^(review|support_ticket|customer_profile)$"
+    )
     decision_type: Optional[str] = None
     status: Optional[str] = None
     confidence_min: Optional[float] = Field(None, ge=0.0, le=1.0)
@@ -98,6 +108,7 @@ class AgentDecisionFilter(BaseModel):
 
 class AgentDecisionStats(BaseModel):
     """Agent decision statistics"""
+
     total_decisions: int
     decisions_by_type: Dict[str, int]
     decisions_by_status: Dict[str, int]
@@ -112,6 +123,7 @@ class AgentDecisionStats(BaseModel):
 
 class DecisionRuleSummary(BaseModel):
     """Summary of a decision rule"""
+
     name: str
     action: str
     confidence: float
@@ -122,6 +134,7 @@ class DecisionRuleSummary(BaseModel):
 
 class DecisionRulesResponse(BaseModel):
     """Response schema for decision rules summary"""
+
     review_rules: List[DecisionRuleSummary]
     ticket_rules: List[DecisionRuleSummary]
     safety_rules: List[DecisionRuleSummary]
@@ -131,6 +144,7 @@ class DecisionRulesResponse(BaseModel):
 
 class AgentPerformanceMetrics(BaseModel):
     """Agent performance metrics"""
+
     decision_accuracy: float
     customer_satisfaction_score: Optional[float]
     response_time_avg_ms: float
@@ -144,6 +158,7 @@ class AgentPerformanceMetrics(BaseModel):
 
 class AgentDecisionOutcome(BaseModel):
     """Agent decision outcome tracking"""
+
     decision_id: str
     outcome_success: bool
     outcome_rating: Optional[float] = Field(None, ge=0.0, le=1.0)
@@ -154,28 +169,30 @@ class AgentDecisionOutcome(BaseModel):
 
 class AgentDecisionBulkRequest(BaseModel):
     """Bulk decision request"""
+
     input_items: List[Dict[str, Any]]
     common_context: Optional[Dict[str, Any]] = None
     business_rules: Optional[Dict[str, Any]] = None
     parallel_processing: bool = True
-    
-    @field_validator('input_items')
+
+    @field_validator("input_items")
     def validate_input_items(cls, v):
         """Validate input items"""
         if not v or len(v) == 0:
             raise ValueError("At least one input item is required")
         if len(v) > 100:
             raise ValueError("Maximum 100 items allowed per bulk request")
-        
+
         for item in v:
-            if 'input_type' not in item or 'input_id' not in item:
+            if "input_type" not in item or "input_id" not in item:
                 raise ValueError("Each item must have input_type and input_id")
-        
+
         return v
 
 
 class AgentDecisionBulkResponse(BaseModel):
     """Bulk decision response"""
+
     total_processed: int
     successful_decisions: int
     failed_decisions: int
@@ -186,24 +203,28 @@ class AgentDecisionBulkResponse(BaseModel):
 
 class AgentConfigurationRequest(BaseModel):
     """Agent configuration request"""
+
     confidence_thresholds: Optional[Dict[str, float]] = None
     auto_approval_rules: Optional[Dict[str, Any]] = None
     escalation_rules: Optional[Dict[str, Any]] = None
     notification_settings: Optional[Dict[str, Any]] = None
     custom_rules: Optional[List[Dict[str, Any]]] = None
-    
-    @field_validator('confidence_thresholds')
+
+    @field_validator("confidence_thresholds")
     def validate_confidence_thresholds(cls, v):
         """Validate confidence thresholds"""
         if v:
             for key, value in v.items():
                 if not isinstance(value, (int, float)) or not 0.0 <= value <= 1.0:
-                    raise ValueError(f"Confidence threshold {key} must be between 0.0 and 1.0")
+                    raise ValueError(
+                        f"Confidence threshold {key} must be between 0.0 and 1.0"
+                    )
         return v
 
 
 class AgentConfiguration(BaseModel):
     """Agent configuration response"""
+
     organization_id: str
     confidence_thresholds: Dict[str, float]
     auto_approval_enabled: bool
@@ -217,6 +238,7 @@ class AgentConfiguration(BaseModel):
 
 class AgentAuditLog(BaseModel):
     """Agent audit log entry"""
+
     id: str
     organization_id: str
     decision_id: str
@@ -230,6 +252,7 @@ class AgentAuditLog(BaseModel):
 
 class AgentHealthCheck(BaseModel):
     """Agent system health check"""
+
     status: str
     version: str
     uptime_seconds: int
@@ -240,7 +263,6 @@ class AgentHealthCheck(BaseModel):
     last_decision_at: Optional[datetime]
     system_resources: Dict[str, Any]
     dependencies_status: Dict[str, str]
-
 
 
 # Aliases for backward compatibility

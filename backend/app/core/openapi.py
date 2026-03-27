@@ -1,42 +1,44 @@
 """
 OpenAPI documentation customization and utilities
 """
+
+import json
+from typing import Any, Dict, Optional
+
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
-from typing import Dict, Any, Optional
-import json
 
 
 def custom_openapi(app: FastAPI) -> Dict[str, Any]:
     """Generate custom OpenAPI schema with enhanced documentation"""
-    
+
     if app.openapi_schema:
         return app.openapi_schema
-    
+
     # Generate base OpenAPI schema
     openapi_schema = get_openapi(
         title=app.title,
         version=app.version,
         description=app.description,
         routes=app.routes,
-        servers=app.servers
+        servers=app.servers,
     )
-    
+
     # Ensure components exists
     if "components" not in openapi_schema:
         openapi_schema["components"] = {}
-    
+
     # Add custom security schemes
     if "securitySchemes" not in openapi_schema["components"]:
         openapi_schema["components"]["securitySchemes"] = {}
-    
+
     openapi_schema["components"]["securitySchemes"]["BearerAuth"] = {
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT",
-        "description": "JWT Bearer token authentication. Include the token in the Authorization header as 'Bearer <token>'"
+        "description": "JWT Bearer token authentication. Include the token in the Authorization header as 'Bearer <token>'",
     }
-    
+
     # Cache the schema
     app.openapi_schema = openapi_schema
     return app.openapi_schema
@@ -44,10 +46,10 @@ def custom_openapi(app: FastAPI) -> Dict[str, Any]:
 
 def add_endpoint_examples(app: FastAPI):
     """Add comprehensive examples to API endpoints"""
-    
+
     # This would be called after all routes are added
     # to inject examples into the OpenAPI schema
-    
+
     examples = {
         "/api/v1/reviews/ingest": {
             "post": {
@@ -64,8 +66,8 @@ def add_endpoint_examples(app: FastAPI):
                                         "customer_name": "John Doe",
                                         "rating": 2,
                                         "content": "Service was terrible, waited 2 hours for my order. Very disappointed.",
-                                        "created_at": "2024-01-15T10:30:00Z"
-                                    }
+                                        "created_at": "2024-01-15T10:30:00Z",
+                                    },
                                 },
                                 "positive_review": {
                                     "summary": "Positive Review Example",
@@ -76,9 +78,9 @@ def add_endpoint_examples(app: FastAPI):
                                         "customer_name": "Jane Smith",
                                         "rating": 5,
                                         "content": "Excellent service! The staff was friendly and the food was amazing. Highly recommend!",
-                                        "created_at": "2024-01-15T14:20:00Z"
-                                    }
-                                }
+                                        "created_at": "2024-01-15T14:20:00Z",
+                                    },
+                                },
                             }
                         }
                     }
@@ -99,18 +101,18 @@ def add_endpoint_examples(app: FastAPI):
                                         "trigger_type": "support_ticket",
                                         "context": {
                                             "ticket_id": "ticket_456",
-                                            "issue_summary": "Billing problem, customer frustrated with multiple failed charges"
-                                        }
-                                    }
+                                            "issue_summary": "Billing problem, customer frustrated with multiple failed charges",
+                                        },
+                                    },
                                 }
                             }
                         }
                     }
                 }
             }
-        }
+        },
     }
-    
+
     # This would be implemented to inject examples into the schema
     # For now, it's a placeholder for future enhancement
     pass
@@ -118,7 +120,7 @@ def add_endpoint_examples(app: FastAPI):
 
 def generate_api_documentation():
     """Generate additional API documentation files"""
-    
+
     # Generate markdown documentation
     markdown_docs = """
 # Revive AI API Documentation
@@ -226,38 +228,34 @@ The API supports multiple versioning strategies:
 
 Current stable version: **v1**
     """
-    
+
     return markdown_docs
 
 
 class OpenAPICustomizer:
     """Utility class for customizing OpenAPI documentation"""
-    
+
     @staticmethod
     def setup_custom_openapi(app: FastAPI):
         """Set up custom OpenAPI schema generation"""
         app.openapi = lambda: custom_openapi(app)
-    
+
     @staticmethod
     def add_security_schemes(openapi_schema: dict):
         """Add security schemes to OpenAPI schema"""
         if "components" not in openapi_schema:
             openapi_schema["components"] = {}
-        
+
         openapi_schema["components"]["securitySchemes"] = {
-            "BearerAuth": {
-                "type": "http",
-                "scheme": "bearer",
-                "bearerFormat": "JWT"
-            }
+            "BearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}
         }
-    
+
     @staticmethod
     def add_common_responses(openapi_schema: dict):
         """Add common response schemas"""
         # Implementation would add common response schemas
         pass
-    
+
     @staticmethod
     def enhance_endpoint_documentation(openapi_schema: dict):
         """Enhance individual endpoint documentation"""

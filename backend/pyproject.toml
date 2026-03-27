@@ -167,6 +167,9 @@ addopts = [
     "--cov-report=xml",
     "--cov-fail-under=20",
 ]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
 testpaths = ["tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]

@@ -1,16 +1,18 @@
 """
 FastAPI dependencies for authentication and authorization
 """
+
 from typing import Optional
+
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_async_db
+from app.core.permissions import AccessControlContext, Permission, PermissionManager
 from app.core.security import SecurityService
-from app.core.permissions import Permission, PermissionManager, AccessControlContext
-from app.models.user import User, UserRole
 from app.models.organization import Organization
+from app.models.user import User, UserRole
 from app.services.auth_service import AuthService
 
 # Security scheme
@@ -19,7 +21,7 @@ security = HTTPBearer()
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
 ) -> User:
     """
     Get current authenticated user from JWT token
@@ -27,7 +29,7 @@ async def get_current_user(
     try:
         # Extract user ID from token
         user_id = SecurityService.get_user_id_from_token(credentials.credentials)
-        
+
         # Get user from database
         user = await AuthService.get_user_by_id(db, user_id)
         if not user:
@@ -36,7 +38,7 @@ async def get_current_user(
                 detail="User not found",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        
+
         # Check if user is active
         if not user.is_active:
             raise HTTPException(
@@ -44,9 +46,9 @@ async def get_current_user(
                 detail="User account is deactivated",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        
+
         return user
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -58,8 +60,7 @@ async def get_current_user(
 
 
 async def get_current_organization(
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_db)
+    user: User = Depends(get_current_user), db: AsyncSession = Depends(get_async_db)
 ) -> Organization:
     """
     Get current user's organization
@@ -68,14 +69,14 @@ async def get_current_organization(
     if not organization:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Organization not found"
+            detail="Organization not found",
         )
     return organization
 
 
 async def get_access_control_context(
     user: User = Depends(get_current_user),
-    organization: Organization = Depends(get_current_organization)
+    organization: Organization = Depends(get_current_organization),
 ) -> AccessControlContext:
     """
     Get access control context for current user
@@ -84,7 +85,7 @@ async def get_access_control_context(
         user_id=str(user.id),
         organization_id=str(organization.id),
         role=user.role,
-        email=user.email
+        email=user.email,
     )
 
 
@@ -92,12 +93,13 @@ def require_permission(permission: Permission):
     """
     Dependency factory for requiring specific permission
     """
+
     async def permission_dependency(
-        context: AccessControlContext = Depends(get_access_control_context)
+        context: AccessControlContext = Depends(get_access_control_context),
     ) -> AccessControlContext:
         context.require_permission(permission)
         return context
-    
+
     return permission_dependency
 
 
@@ -105,12 +107,13 @@ def require_any_permission(*permissions: Permission):
     """
     Dependency factory for requiring any of the specified permissions
     """
+
     async def permission_dependency(
-        context: AccessControlContext = Depends(get_access_control_context)
+        context: AccessControlContext = Depends(get_access_control_context),
     ) -> AccessControlContext:
         PermissionManager.require_any_permission(context.role, list(permissions))
         return context
-    
+
     return permission_dependency
 
 
@@ -118,16 +121,15 @@ def require_role(role: UserRole):
     """
     Dependency factory for requiring specific role
     """
-    async def role_dependency(
-        user: User = Depends(get_current_user)
-    ) -> User:
+
+    async def role_dependency(user: User = Depends(get_current_user)) -> User:
         if user.role != role:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Required role: {role.value}"
+                detail=f"Required role: {role.value}",
             )
         return user
-    
+
     return role_dependency
 
 
@@ -142,22 +144,23 @@ def require_manager_or_admin():
     """
     Dependency for requiring manager or admin role
     """
-    async def role_dependency(
-        user: User = Depends(get_current_user)
-    ) -> User:
+
+    async def role_dependency(user: User = Depends(get_current_user)) -> User:
         if user.role not in [UserRole.MANAGER, UserRole.ADMIN]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Required role: manager or admin"
+                detail="Required role: manager or admin",
             )
         return user
-    
+
     return role_dependency
 
 
 async def get_optional_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False)),
-    db: AsyncSession = Depends(get_async_db)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(
+        HTTPBearer(auto_error=False)
+    ),
+    db: AsyncSession = Depends(get_async_db),
 ) -> Optional[User]:
     """
     Get current user if authenticated, otherwise return None
@@ -165,7 +168,7 @@ async def get_optional_user(
     """
     if not credentials:
         return None
-    
+
     try:
         user_id = SecurityService.get_user_id_from_token(credentials.credentials)
         user = await AuthService.get_user_by_id(db, user_id)
@@ -178,21 +181,21 @@ class OrganizationFilter:
     """
     Utility class for filtering resources by organization
     """
-    
+
     def __init__(self, context: AccessControlContext):
         self.context = context
-    
+
     def filter_query(self, query, model_class):
         """Filter query by organization"""
         return query.where(model_class.organization_id == self.context.organization_id)
-    
+
     def validate_resource(self, resource):
         """Validate resource belongs to user's organization"""
         self.context.validate_resource_access(resource)
 
 
 def get_organization_filter(
-    context: AccessControlContext = Depends(get_access_control_context)
+    context: AccessControlContext = Depends(get_access_control_context),
 ) -> OrganizationFilter:
     """
     Get organization filter for current user

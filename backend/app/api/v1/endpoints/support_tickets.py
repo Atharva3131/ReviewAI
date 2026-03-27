@@ -1,27 +1,29 @@
 """Support ticket API endpoints"""
-from fastapi import APIRouter, Depends, Query, status
-from typing import Optional, List
+
+from typing import List, Optional
 from uuid import UUID
 
+from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.dependencies import get_current_user, get_db
+from app.models.support_ticket import TicketCategory, TicketPriority, TicketStatus
 from app.models.user import User
-from app.models.support_ticket import TicketStatus, TicketPriority, TicketCategory
 from app.schemas.support_ticket import (
     SupportTicketCreate,
-    SupportTicketUpdate,
-    SupportTicketResponse,
     SupportTicketListResponse,
-    TicketAssignRequest,
-    TicketResolveRequest,
-    TicketReopenRequest,
-    TicketSatisfactionRequest,
-    TicketResponseRequest,
+    SupportTicketResponse,
+    SupportTicketUpdate,
     TicketAnalyzeRequest,
     TicketAnalyzeResponse,
-    TicketStatsResponse
+    TicketAssignRequest,
+    TicketReopenRequest,
+    TicketResolveRequest,
+    TicketResponseRequest,
+    TicketSatisfactionRequest,
+    TicketStatsResponse,
 )
 from app.services.support_ticket_service import SupportTicketService
-from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 
@@ -30,16 +32,16 @@ router = APIRouter()
     "/",
     response_model=SupportTicketResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Create a new support ticket"
+    summary="Create a new support ticket",
 )
 async def create_ticket(
     ticket_data: SupportTicketCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Create a new support ticket.
-    
+
     - **subject**: Ticket subject (required)
     - **content**: Ticket description (required)
     - **priority**: Ticket priority (default: medium)
@@ -54,9 +56,7 @@ async def create_ticket(
 
 
 @router.get(
-    "/",
-    response_model=SupportTicketListResponse,
-    summary="List support tickets"
+    "/", response_model=SupportTicketListResponse, summary="List support tickets"
 )
 async def list_tickets(
     status_filter: Optional[TicketStatus] = Query(None, alias="status"),
@@ -69,11 +69,11 @@ async def list_tickets(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     List support tickets with optional filters and pagination.
-    
+
     - **status**: Filter by ticket status
     - **priority**: Filter by priority
     - **category**: Filter by category
@@ -95,32 +95,29 @@ async def list_tickets(
         is_overdue=is_overdue,
         search=search,
         page=page,
-        page_size=page_size
+        page_size=page_size,
     )
-    
+
     total_pages = (total + page_size - 1) // page_size
-    
+
     return SupportTicketListResponse(
         tickets=tickets,
         total=total,
         page=page,
         page_size=page_size,
-        total_pages=total_pages
+        total_pages=total_pages,
     )
 
 
 @router.get(
-    "/stats",
-    response_model=TicketStatsResponse,
-    summary="Get ticket statistics"
+    "/stats", response_model=TicketStatsResponse, summary="Get ticket statistics"
 )
 async def get_ticket_stats(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """
     Get comprehensive ticket statistics for the organization.
-    
+
     Returns counts, averages, and breakdowns by priority, category, and source.
     """
     service = SupportTicketService(db)
@@ -129,14 +126,12 @@ async def get_ticket_stats(
 
 
 @router.get(
-    "/{ticket_id}",
-    response_model=SupportTicketResponse,
-    summary="Get a support ticket"
+    "/{ticket_id}", response_model=SupportTicketResponse, summary="Get a support ticket"
 )
 async def get_ticket(
     ticket_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get a specific support ticket by ID.
@@ -149,45 +144,45 @@ async def get_ticket(
 @router.patch(
     "/{ticket_id}",
     response_model=SupportTicketResponse,
-    summary="Update a support ticket"
+    summary="Update a support ticket",
 )
 async def update_ticket(
     ticket_id: UUID,
     update_data: SupportTicketUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Update a support ticket.
-    
+
     Only provided fields will be updated.
     """
     service = SupportTicketService(db)
-    ticket = await service.update_ticket(ticket_id, current_user.organization_id, update_data)
+    ticket = await service.update_ticket(
+        ticket_id, current_user.organization_id, update_data
+    )
     return ticket
 
 
 @router.post(
     "/{ticket_id}/assign",
     response_model=SupportTicketResponse,
-    summary="Assign a ticket"
+    summary="Assign a ticket",
 )
 async def assign_ticket(
     ticket_id: UUID,
     assign_data: TicketAssignRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Assign a ticket to a user.
-    
+
     Automatically changes status from OPEN to IN_PROGRESS.
     """
     service = SupportTicketService(db)
     ticket = await service.assign_ticket(
-        ticket_id,
-        current_user.organization_id,
-        assign_data.assigned_to
+        ticket_id, current_user.organization_id, assign_data.assigned_to
     )
     return ticket
 
@@ -195,17 +190,17 @@ async def assign_ticket(
 @router.post(
     "/{ticket_id}/resolve",
     response_model=SupportTicketResponse,
-    summary="Resolve a ticket"
+    summary="Resolve a ticket",
 )
 async def resolve_ticket(
     ticket_id: UUID,
     resolve_data: TicketResolveRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Resolve a support ticket.
-    
+
     - **resolution**: Description of how the issue was resolved
     - **resolved_by**: User ID or name who resolved the ticket
     """
@@ -214,24 +209,22 @@ async def resolve_ticket(
         ticket_id,
         current_user.organization_id,
         resolve_data.resolution,
-        resolve_data.resolved_by
+        resolve_data.resolved_by,
     )
     return ticket
 
 
 @router.post(
-    "/{ticket_id}/close",
-    response_model=SupportTicketResponse,
-    summary="Close a ticket"
+    "/{ticket_id}/close", response_model=SupportTicketResponse, summary="Close a ticket"
 )
 async def close_ticket(
     ticket_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Close a resolved ticket.
-    
+
     Ticket must be in RESOLVED status before it can be closed.
     """
     service = SupportTicketService(db)
@@ -242,24 +235,22 @@ async def close_ticket(
 @router.post(
     "/{ticket_id}/reopen",
     response_model=SupportTicketResponse,
-    summary="Reopen a ticket"
+    summary="Reopen a ticket",
 )
 async def reopen_ticket(
     ticket_id: UUID,
     reopen_data: TicketReopenRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Reopen a resolved or closed ticket.
-    
+
     - **reason**: Optional reason for reopening
     """
     service = SupportTicketService(db)
     ticket = await service.reopen_ticket(
-        ticket_id,
-        current_user.organization_id,
-        reopen_data.reason
+        ticket_id, current_user.organization_id, reopen_data.reason
     )
     return ticket
 
@@ -267,17 +258,17 @@ async def reopen_ticket(
 @router.post(
     "/{ticket_id}/response",
     response_model=SupportTicketResponse,
-    summary="Add a response to a ticket"
+    summary="Add a response to a ticket",
 )
 async def add_response(
     ticket_id: UUID,
     response_data: TicketResponseRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Add a response to a ticket.
-    
+
     - **content**: Response content
     - **is_internal**: Whether this is an internal note (not visible to customer)
     """
@@ -286,7 +277,7 @@ async def add_response(
         ticket_id,
         current_user.organization_id,
         response_data.content,
-        response_data.is_internal
+        response_data.is_internal,
     )
     return ticket
 
@@ -294,17 +285,17 @@ async def add_response(
 @router.post(
     "/{ticket_id}/satisfaction",
     response_model=SupportTicketResponse,
-    summary="Set customer satisfaction rating"
+    summary="Set customer satisfaction rating",
 )
 async def set_satisfaction(
     ticket_id: UUID,
     satisfaction_data: TicketSatisfactionRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Set customer satisfaction rating for a resolved ticket.
-    
+
     - **rating**: Satisfaction rating (1-5 stars)
     - **feedback**: Optional customer feedback
     """
@@ -313,24 +304,22 @@ async def set_satisfaction(
         ticket_id,
         current_user.organization_id,
         satisfaction_data.rating,
-        satisfaction_data.feedback
+        satisfaction_data.feedback,
     )
     return ticket
 
 
 @router.post(
-    "/analyze",
-    response_model=TicketAnalyzeResponse,
-    summary="Analyze a ticket"
+    "/analyze", response_model=TicketAnalyzeResponse, summary="Analyze a ticket"
 )
 async def analyze_ticket(
     analyze_data: TicketAnalyzeRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Analyze a ticket for sentiment, urgency, and get recommendations.
-    
+
     Returns:
     - Sentiment score and label
     - Urgency score
@@ -341,8 +330,7 @@ async def analyze_ticket(
     """
     service = SupportTicketService(db)
     analysis = await service.analyze_ticket(
-        analyze_data.ticket_id,
-        current_user.organization_id
+        analyze_data.ticket_id, current_user.organization_id
     )
     return analysis
 
@@ -350,19 +338,18 @@ async def analyze_ticket(
 @router.delete(
     "/{ticket_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Delete a support ticket"
+    summary="Delete a support ticket",
 )
 async def delete_ticket(
     ticket_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Delete a support ticket.
-    
+
     This is a permanent action and cannot be undone.
     """
     service = SupportTicketService(db)
     await service.delete_ticket(ticket_id, current_user.organization_id)
     return None
-

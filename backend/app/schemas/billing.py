@@ -1,12 +1,15 @@
 """Billing and subscription schemas"""
-from pydantic import BaseModel, Field, field_validator
-from typing import Optional, Dict, Any, List
+
 from datetime import datetime
 from decimal import Decimal
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class SubscriptionPlanBase(BaseModel):
     """Base subscription plan schema"""
+
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = None
     price_monthly: Decimal = Field(..., ge=0)
@@ -17,12 +20,14 @@ class SubscriptionPlanBase(BaseModel):
 
 class SubscriptionPlanCreate(SubscriptionPlanBase):
     """Schema for creating subscription plan"""
+
     stripe_price_id_monthly: Optional[str] = None
     stripe_price_id_yearly: Optional[str] = None
 
 
 class SubscriptionPlanUpdate(BaseModel):
     """Schema for updating subscription plan"""
+
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     description: Optional[str] = None
     price_monthly: Optional[Decimal] = Field(None, ge=0)
@@ -34,6 +39,7 @@ class SubscriptionPlanUpdate(BaseModel):
 
 class SubscriptionPlanResponse(SubscriptionPlanBase):
     """Schema for subscription plan response"""
+
     id: str
     stripe_price_id_monthly: Optional[str] = None
     stripe_price_id_yearly: Optional[str] = None
@@ -47,6 +53,7 @@ class SubscriptionPlanResponse(SubscriptionPlanBase):
 
 class SubscriptionCreate(BaseModel):
     """Schema for creating subscription"""
+
     plan_id: str
     billing_period: str = Field(..., pattern="^(monthly|yearly)$")
     trial_days: Optional[int] = Field(None, ge=0, le=90)
@@ -54,6 +61,7 @@ class SubscriptionCreate(BaseModel):
 
 class SubscriptionUpdate(BaseModel):
     """Schema for updating subscription"""
+
     plan_id: Optional[str] = None
     billing_period: Optional[str] = Field(None, pattern="^(monthly|yearly)$")
     cancel_at_period_end: Optional[bool] = None
@@ -61,6 +69,7 @@ class SubscriptionUpdate(BaseModel):
 
 class SubscriptionResponse(BaseModel):
     """Schema for subscription response"""
+
     id: str
     organization_id: str
     plan_id: str
@@ -86,6 +95,7 @@ class SubscriptionResponse(BaseModel):
 
 class InvoiceResponse(BaseModel):
     """Schema for invoice response"""
+
     id: str
     organization_id: str
     subscription_id: str
@@ -107,20 +117,22 @@ class InvoiceResponse(BaseModel):
 
 class UsageRecordCreate(BaseModel):
     """Schema for creating usage record"""
+
     metric_name: str = Field(..., min_length=1, max_length=100)
     quantity: int = Field(..., ge=0)
     period_start: datetime
     period_end: datetime
 
-    @field_validator('period_end')
+    @field_validator("period_end")
     def validate_period(cls, v, values):
-        if 'period_start' in values and v <= values['period_start']:
-            raise ValueError('period_end must be after period_start')
+        if "period_start" in values and v <= values["period_start"]:
+            raise ValueError("period_end must be after period_start")
         return v
 
 
 class UsageRecordResponse(BaseModel):
     """Schema for usage record response"""
+
     id: str
     organization_id: str
     subscription_id: str
@@ -136,6 +148,7 @@ class UsageRecordResponse(BaseModel):
 
 class CheckoutSessionCreate(BaseModel):
     """Schema for creating Stripe checkout session"""
+
     plan_id: str
     billing_period: str = Field(..., pattern="^(monthly|yearly)$")
     success_url: str
@@ -145,28 +158,33 @@ class CheckoutSessionCreate(BaseModel):
 
 class CheckoutSessionResponse(BaseModel):
     """Schema for checkout session response"""
+
     session_id: str
     url: str
 
 
 class BillingPortalSessionCreate(BaseModel):
     """Schema for creating billing portal session"""
+
     return_url: str
 
 
 class BillingPortalSessionResponse(BaseModel):
     """Schema for billing portal session response"""
+
     url: str
 
 
 class WebhookEvent(BaseModel):
     """Schema for webhook event"""
+
     type: str
     data: Dict[str, Any]
 
 
 class SubscriptionUsageResponse(BaseModel):
     """Schema for subscription usage response"""
+
     subscription_id: str
     current_period_start: datetime
     current_period_end: datetime
@@ -177,9 +195,9 @@ class SubscriptionUsageResponse(BaseModel):
 
 class BillingOverviewResponse(BaseModel):
     """Schema for billing overview response"""
+
     subscription: Optional[SubscriptionResponse] = None
     upcoming_invoice: Optional[InvoiceResponse] = None
     recent_invoices: List[InvoiceResponse] = []
     usage: Optional[SubscriptionUsageResponse] = None
     payment_method: Optional[Dict[str, Any]] = None
-

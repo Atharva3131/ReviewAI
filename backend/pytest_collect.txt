@@ -1,0 +1,900 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.5, pytest-8.3.4, pluggy-1.6.0
+rootdir: C:\Users\Atharva\Documents\AI_REVIEW_AGENT\backend
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.12.1, hypothesis-6.122.3, asyncio-0.24.0, cov-6.0.0, html-4.1.1, json-report-1.5.0, metadata-3.1.1, mock-3.14.0, xdist-3.6.1
+asyncio: mode=Mode.AUTO, default_loop_scope=function
+collected 587 items / 1 error
+
+<Dir backend>
+  <Dir tests>
+    <Dir security>
+      <Module test_security_audit.py>
+        <Class TestAuthenticationSecurity>
+          <Function test_jwt_token_manipulation>
+          <Function test_expired_token_rejection>
+          <Function test_password_timing_attack_protection>
+          <Function test_weak_password_rejection>
+          <Function test_password_strength_requirements>
+        <Class TestSQLInjectionProtection>
+          <Function test_union_based_injection>
+          <Function test_boolean_based_injection>
+          <Function test_time_based_injection>
+          <Function test_stacked_queries>
+          <Function test_information_schema_access>
+        <Class TestXSSProtection>
+          <Function test_script_tag_injection>
+          <Function test_event_handler_injection>
+          <Function test_javascript_protocol>
+          <Function test_html_sanitization>
+        <Class TestPathTraversalProtection>
+          <Function test_directory_traversal>
+          <Function test_url_encoded_traversal>
+          <Function test_reserved_filenames>
+        <Class TestCSRFProtection>
+          <Function test_csrf_token_required_for_post>
+          <Function test_csrf_token_validation>
+          <Function test_safe_methods_no_csrf>
+        <Class TestRateLimiting>
+          <Coroutine test_global_rate_limit>
+          <Coroutine test_endpoint_specific_rate_limit>
+          <Coroutine test_burst_protection>
+        <Class TestAuthorizationBypass>
+          <Function test_horizontal_privilege_escalation>
+          <Function test_vertical_privilege_escalation>
+          <Function test_idor_protection>
+        <Class TestInputValidation>
+          <Function test_email_validation>
+          <Function test_url_validation>
+          <Function test_length_limits>
+        <Class TestSecurityHeaders>
+          <Function test_security_headers_present>
+          <Function test_hsts_header>
+          <Function test_cache_control_sensitive_endpoints>
+        <Class TestDataProtection>
+          <Function test_password_hashing>
+          <Function test_api_key_hashing>
+          <Function test_constant_time_comparison>
+        <Class TestAuditLogging>
+          <Coroutine test_login_attempt_logging>
+          <Coroutine test_password_change_logging>
+        <Class TestMultiTenantIsolation>
+          <Function test_organization_id_in_token>
+          <Function test_organization_id_extraction>
+    <Module test_api_endpoints.py>
+      <Class TestReviewsAPI>
+        <Function test_ingest_review_success>
+        <Function test_ingest_review_invalid_data>
+        <Function test_analyze_review_success>
+        <Function test_analyze_review_not_found>
+        <Function test_analyze_review_no_content>
+        <Function test_generate_review_response_success>
+        <Function test_get_reviews_success>
+        <Function test_get_reviews_with_filters>
+        <Function test_get_review_by_id_success>
+        <Function test_get_review_by_id_not_found>
+        <Function test_get_review_stats_success>
+      <Class TestDashboardAPI>
+        <Function test_get_dashboard_metrics_success>
+        <Function test_get_dashboard_metrics_with_time_range>
+        <Function test_get_dashboard_metrics_invalid_time_range>
+        <Function test_get_dashboard_metrics_with_cache_refresh>
+      <Class TestAuthAPI>
+        <Function test_login_success>
+        <Function test_login_invalid_credentials>
+        <Function test_register_success>
+        <Function test_register_email_exists>
+      <Class TestCustomersAPI>
+        <Function test_get_customers_success>
+        <Function test_get_customer_by_id_success>
+        <Function test_customer_recovery_success>
+      <Class TestAgentsAPI>
+        <Function test_agent_decide_action_success>
+        <Function test_agent_decide_action_low_confidence>
+      <Class TestErrorHandling>
+        <Function test_unauthorized_access>
+        <Function test_forbidden_access>
+        <Function test_internal_server_error>
+        <Function test_validation_error>
+      <Class TestRateLimiting>
+        <Function test_rate_limit_not_exceeded>
+        <Function test_rate_limit_exceeded>
+      <Class TestPagination>
+        <Function test_pagination_default>
+        <Function test_pagination_custom>
+        <Function test_pagination_invalid_params>
+    <Module test_api_integration.py>
+      <Class TestAuthenticationAPI>
+        <Coroutine test_user_registration>
+        <Coroutine test_user_login>
+        <Coroutine test_invalid_login>
+        <Coroutine test_get_current_user>
+        <Coroutine test_unauthorized_access>
+        <Coroutine test_token_refresh>
+      <Class TestReviewsAPI>
+        <Coroutine test_ingest_review>
+        <Coroutine test_analyze_review>
+        <Coroutine test_get_reviews>
+        <Coroutine test_get_review_by_id>
+        <Coroutine test_generate_review_response>
+        <Coroutine test_review_stats>
+      <Class TestDashboardAPI>
+        <Coroutine test_get_dashboard_metrics>
+        <Coroutine test_get_kpis_only>
+        <Coroutine test_get_activity_feed>
+        <Coroutine test_get_metrics_trends>
+        <Coroutine test_dashboard_alerts>
+        <Coroutine test_refresh_dashboard_cache>
+      <Class TestCustomersAPI>
+        <Coroutine test_get_customers>
+        <Coroutine test_get_at_risk_customers>
+        <Coroutine test_get_customer_risk>
+        <Coroutine test_recover_customer>
+        <Coroutine test_get_customer_recovery_actions>
+        <Coroutine test_batch_risk_update>
+      <Class TestAgentsAPI>
+        <Coroutine test_agent_decide_action>
+        <Coroutine test_get_agent_decisions>
+        <Coroutine test_get_agent_decision_by_id>
+        <Coroutine test_get_decision_rules_summary>
+      <Class TestUsersAPI>
+        <Coroutine test_get_users>
+        <Coroutine test_get_user_by_id>
+        <Coroutine test_create_user>
+        <Coroutine test_get_organization_user_stats>
+      <Class TestWebhooksAPI>
+        <Coroutine test_google_reviews_webhook>
+        <Coroutine test_simulate_google_reviews_webhook>
+        <Coroutine test_generate_test_google_review>
+        <Coroutine test_get_google_reviews_status>
+        <Coroutine test_crm_webhook_endpoints>
+        <Coroutine test_get_crm_webhook_status>
+      <Class TestMultiTenantIsolation>
+        <Coroutine test_review_isolation>
+        <Coroutine test_customer_isolation>
+        <Coroutine test_dashboard_metrics_isolation>
+      <Class TestErrorHandling>
+        <Coroutine test_invalid_review_id>
+        <Coroutine test_invalid_customer_id>
+        <Coroutine test_malformed_request_data>
+        <Coroutine test_invalid_query_parameters>
+        <Coroutine test_rate_limiting_headers>
+      <Class TestPerformanceAndCaching>
+        <Coroutine test_dashboard_metrics_caching>
+        <Coroutine test_pagination_performance>
+    <Module test_api_integration_simple.py>
+      <Class TestAPIEndpointStructure>
+        <Function test_authentication_endpoints_structure>
+        <Function test_review_endpoints_structure>
+        <Function test_dashboard_endpoints_structure>
+        <Function test_customer_endpoints_structure>
+        <Function test_agent_endpoints_structure>
+        <Function test_webhook_endpoints_structure>
+      <Class TestBusinessLogicValidation>
+        <Function test_sentiment_analysis_logic>
+        <Function test_urgency_classification_logic>
+        <Function test_customer_risk_assessment_logic>
+        <Function test_agent_decision_logic>
+      <Class TestDataValidationRules>
+        <Function test_review_data_validation>
+        <Function test_customer_data_validation>
+        <Function test_organization_isolation_rules>
+      <Class TestAPIResponseFormats>
+        <Function test_success_response_format>
+        <Function test_error_response_format>
+        <Function test_pagination_format>
+    <Module test_auth_service.py>
+      <Class TestAuthService>
+        <Coroutine test_register_user_success>
+        <Coroutine test_register_user_email_exists>
+        <Coroutine test_authenticate_user_success>
+        <Coroutine test_authenticate_user_not_found>
+        <Coroutine test_authenticate_user_wrong_password>
+        <Coroutine test_authenticate_user_locked_account>
+        <Coroutine test_authenticate_user_inactive_account>
+        <Coroutine test_create_tokens_success>
+        <Coroutine test_refresh_access_token_success>
+        <Coroutine test_refresh_access_token_invalid_token>
+        <Coroutine test_refresh_access_token_not_in_redis>
+        <Coroutine test_logout_user_success>
+        <Coroutine test_logout_user_failure>
+        <Coroutine test_get_user_by_email_success>
+        <Coroutine test_get_user_by_email_not_found>
+        <Coroutine test_get_user_by_id_success>
+        <Coroutine test_get_user_by_id_invalid_uuid>
+        <Coroutine test_verify_user_email_success>
+        <Coroutine test_verify_user_email_user_not_found>
+        <Coroutine test_change_password_success>
+        <Coroutine test_change_password_user_not_found>
+        <Coroutine test_change_password_wrong_current_password>
+        <Coroutine test_reset_password_success>
+        <Coroutine test_reset_password_user_not_found>
+        <Coroutine test_confirm_password_reset_success>
+        <Coroutine test_confirm_password_reset_invalid_token>
+        <Coroutine test_confirm_password_reset_user_not_found>
+      <Class TestSecurityService>
+        <Function test_create_access_token_success>
+        <Function test_create_access_token_with_custom_expiry>
+        <Function test_create_refresh_token_success>
+        <Function test_verify_token_success>
+        <Function test_verify_token_invalid_token>
+        <Function test_verify_token_expired_token>
+        <Function test_verify_token_wrong_secret>
+      <Class TestTokenData>
+        <Function test_token_data_creation>
+        <Function test_token_data_to_dict>
+      <Class TestPasswordSecurity>
+        <Function test_password_hashing_and_verification>
+        <Function test_password_hashing_different_results>
+      <Class TestAuthenticationIntegration>
+        <Coroutine test_full_authentication_flow>
+        <Coroutine test_token_refresh_flow>
+      <Class TestAuthorizationHelpers>
+        <Function test_role_hierarchy>
+        <Function test_permission_checking>
+    <Module test_bug_condition_run_tests_missing.py>
+      <Function test_run_tests_script_exists>
+      <Function test_run_tests_ci_command_executes>
+      <Function test_run_tests_install_command_executes>
+      <Function test_run_tests_test_command_with_flags_executes>
+      <Function test_run_tests_help_command_executes>
+      <Function test_run_tests_clean_command_executes>
+    <Module test_customer_risk_service.py>
+      <Class TestCustomerRiskAssessmentService>
+        <Coroutine test_assess_customer_risk_high_risk>
+        <Coroutine test_assess_customer_risk_low_risk>
+        <Coroutine test_assess_customer_risk_customer_not_found>
+        <Function test_calculate_recency_risk>
+    <Module test_database_integration.py>
+      <Class TestDatabaseOperations>
+        <Coroutine test_create_organization>
+        <Coroutine test_create_user_with_organization>
+        <Coroutine test_create_review_with_relationships>
+        <Coroutine test_update_customer_risk_scores>
+        <Coroutine test_query_by_organization>
+      <Class TestTransactionManagement>
+        <Coroutine test_successful_transaction>
+        <Coroutine test_transaction_rollback>
+        <Coroutine test_nested_transaction_operations>
+      <Class TestDataIntegrity>
+        <Coroutine test_unique_email_constraint>
+        <Coroutine test_foreign_key_relationships>
+        <Coroutine test_data_validation_constraints>
+      <Class TestDatabasePerformance>
+        <Coroutine test_bulk_insert_performance>
+        <Coroutine test_query_performance_with_filters>
+        <Coroutine test_pagination_performance>
+      <Class TestDatabaseIndexing>
+        <Coroutine test_organization_id_indexing>
+        <Coroutine test_email_indexing>
+        <Coroutine test_timestamp_indexing>
+      <Class TestDatabaseMigrations>
+        <Coroutine test_schema_version_tracking>
+        <Coroutine test_backward_compatibility>
+    <Module test_decision_rules_engine.py>
+      <Class TestDecisionRulesEngine>
+        <Coroutine test_decide_review_action_critical_negative>
+        <Coroutine test_decide_review_action_emergency_safety>
+        <Coroutine test_decide_review_action_legal_threat>
+        <Coroutine test_decide_review_action_positive_review>
+        <Coroutine test_decide_review_action_complex_negative>
+        <Coroutine test_decide_review_action_service_quality_issues>
+        <Coroutine test_decide_review_action_neutral_constructive>
+        <Coroutine test_decide_review_action_complex_case_escalation>
+        <Coroutine test_decide_review_action_low_confidence>
+        <Coroutine test_decide_review_action_moderate_negative>
+        <Coroutine test_decide_review_action_default_positive>
+        <Coroutine test_decide_review_action_default_negative>
+        <Coroutine test_decide_ticket_action_high_priority_negative>
+        <Coroutine test_decide_ticket_action_billing_issues>
+        <Coroutine test_decide_ticket_action_urgent_technical>
+        <Coroutine test_decide_ticket_action_complex_ticket>
+        <Coroutine test_decide_ticket_action_standard_support>
+        <Coroutine test_safety_rule_abusive_content>
+        <Coroutine test_safety_rule_fraud_security>
+        <Function test_contains_abusive_content>
+        <Function test_requires_approval>
+        <Function test_get_rule_summary>
+        <Function test_add_custom_rule>
+        <Coroutine test_rule_priority_ordering>
+        <Coroutine test_decision_consistency>
+        <Coroutine test_edge_case_handling>
+        <Coroutine test_comprehensive_rule_coverage>
+    <Module test_demo_data.py>
+      <Class TestDemoDataStructure>
+        <Function test_review_templates_structure>
+        <Function test_sentiment_rating_correlation>
+        <Function test_organization_templates>
+        <Function test_ticket_templates_structure>
+        <Function test_customer_names_list>
+        <Function test_urgency_levels_valid>
+        <Function test_issue_categories_valid>
+      <Class TestDemoDataLogic>
+        <Function test_risk_score_ranges>
+        <Function test_review_distribution>
+        <Function test_ticket_priority_distribution>
+      <Class TestDemoDataSafety>
+        <Function test_production_environment_blocked>
+        <Function test_clear_flag_exists>
+    <Module test_end_to_end_workflows.py>
+      <Class TestCompleteReviewWorkflow>
+        <Coroutine test_complete_review_ingestion_and_processing_workflow>
+      <Class TestCustomerRecoveryWorkflow>
+        <Coroutine test_complete_customer_recovery_workflow>
+      <Class TestDashboardMetricsWorkflow>
+        <Coroutine test_complete_dashboard_metrics_workflow>
+      <Class TestMultiTenantWorkflow>
+        <Coroutine test_multi_tenant_data_isolation_workflow>
+      <Class TestErrorHandlingWorkflow>
+        <Coroutine test_error_handling_workflow>
+      <Class TestPerformanceWorkflow>
+        <Coroutine test_bulk_operations_performance>
+    <Module test_external_service_integration.py>
+      <Class TestGoogleReviewsIntegration>
+        <Coroutine test_fetch_reviews_success>
+        <Coroutine test_fetch_reviews_authentication_error>
+        <Coroutine test_fetch_reviews_rate_limit>
+        <Coroutine test_post_review_response>
+        <Coroutine test_webhook_verification>
+        <Coroutine test_service_health_check>
+      <Class TestEmailServiceIntegration>
+        <Coroutine test_send_recovery_email_success>
+        <Coroutine test_send_email_invalid_recipient>
+        <Coroutine test_email_template_rendering>
+        <Coroutine test_email_delivery_webhook>
+        <Coroutine test_email_bounce_handling>
+      <Class TestWhatsAppIntegration>
+        <Coroutine test_send_whatsapp_message_success>
+        <Coroutine test_send_whatsapp_template_message>
+        <Coroutine test_whatsapp_webhook_message_received>
+        <Coroutine test_whatsapp_message_status_webhook>
+      <Class TestCRMIntegration>
+        <Coroutine test_fetch_customer_data>
+        <Coroutine test_create_support_ticket>
+        <Coroutine test_update_customer_notes>
+        <Coroutine test_crm_webhook_customer_updated>
+      <Class TestExternalServiceErrorHandling>
+        <Coroutine test_network_timeout_handling>
+        <Coroutine test_connection_error_handling>
+        <Coroutine test_retry_logic_simulation>
+        <Coroutine test_circuit_breaker_simulation>
+      <Class TestServiceHealthMonitoring>
+        <Coroutine test_service_health_check_all_services>
+        <Coroutine test_service_performance_monitoring>
+    <Module test_llm_integration_service.py>
+      <Class TestContentSanitizer>
+        <Function test_sanitize_content_clean>
+        <Function test_sanitize_content_with_profanity>
+        <Function test_sanitize_content_with_sensitive_data>
+        <Function test_sanitize_content_with_script_tags>
+        <Function test_sanitize_content_excessive_whitespace>
+        <Function test_validate_content_valid>
+        <Function test_validate_content_too_short>
+        <Function test_validate_content_too_long>
+        <Function test_validate_content_email_specific>
+        <Function test_validate_content_review_response_specific>
+        <Function test_validate_content_quality_scoring>
+      <Class TestResponseCache>
+        <Function test_cache_miss>
+        <Function test_cache_hit>
+        <Function test_cache_expiry>
+        <Function test_cache_disabled>
+        <Function test_cache_size_limit>
+        <Function test_cache_key_generation>
+        <Function test_cache_clear>
+        <Function test_cache_stats>
+      <Class TestLLMResponseGenerationService>
+        <Coroutine test_generate_review_response_success>
+        <Coroutine test_generate_recovery_email_success>
+        <Coroutine test_generate_apology_message_success>
+        <Coroutine test_generate_discount_offer_success>
+        <Coroutine test_generate_response_with_caching>
+        <Coroutine test_generate_response_no_template>
+        <Coroutine test_generate_response_llm_error>
+        <Coroutine test_generate_response_with_sanitization>
+        <Function test_rate_limiting>
+        <Function test_get_service_stats>
+        <Function test_clear_cache>
+        <Function test_update_rate_limits>
+        <Function test_select_template>
+        <Function test_get_content_type>
+        <Coroutine test_generate_response_with_custom_provider>
+        <Coroutine test_generate_response_with_metadata>
+        <Coroutine test_generate_response_validation_failure>
+      <Class TestGenerationRequestResponse>
+        <Function test_generation_request_creation>
+        <Function test_generation_request_defaults>
+        <Function test_generation_response_creation>
+        <Function test_generation_response_defaults>
+      <Function test_get_llm_service>
+    <Module test_migration_automation.py>
+      <Class TestDatabaseMigrator>
+        <Function test_migrator_initialization>
+        <Function test_migrator_requires_database_url>
+        <Function test_validate_migrations_success>
+        <Function test_validate_migrations_syntax_error>
+        <Function test_check_alembic_config_success>
+        <Function test_check_alembic_config_failure>
+        <Function test_get_current_revision>
+        <Function test_get_current_revision_empty_database>
+        <Function test_get_pending_migrations_none>
+        <Function test_get_pending_migrations_exists>
+        <Function test_generate_sql>
+        <Function test_run_migration_dry_run>
+        <Function test_run_migration_success>
+        <Function test_run_migration_failure>
+        <Function test_verify_migration_success>
+        <Function test_verify_migration_failure>
+        <Function test_create_migration_report>
+        <Function test_create_migration_report_with_error>
+      <Class TestDatabaseRollback>
+        <Function test_rollback_initialization>
+        <Function test_rollback_requires_database_url>
+        <Function test_get_migration_history>
+        <Function test_validate_target_revision_success>
+        <Function test_validate_target_revision_failure>
+        <Function test_generate_rollback_sql>
+        <Function test_confirm_rollback_dry_run>
+        <Function test_run_rollback_dry_run>
+        <Function test_run_rollback_already_at_target>
+        <Function test_run_rollback_success>
+        <Function test_run_rollback_cancelled>
+        <Function test_verify_rollback_success>
+        <Function test_verify_rollback_failure>
+        <Function test_create_rollback_report>
+      <Class TestMigrationIntegration>
+        <Function test_full_migration_workflow>
+        <Function test_full_rollback_workflow>
+    <Module test_performance.py>
+      <Class TestAPIPerformance>
+        <Coroutine test_review_ingestion_performance>
+        <Coroutine test_review_analysis_performance>
+        <Coroutine test_dashboard_metrics_performance>
+      <Class TestDatabasePerformance>
+        <Coroutine test_large_dataset_queries>
+      <Class TestConcurrencyPerformance>
+        <Coroutine test_concurrent_user_sessions>
+      <Class TestMemoryPerformance>
+        <Coroutine test_memory_usage_under_load>
+      <Class TestScalabilityPerformance>
+        <Coroutine test_data_volume_scalability>
+    <Module test_preservation_direct_pytest.py>
+      <Function test_direct_pytest_works_without_run_tests>
+      <Function test_simple_passing_test>
+      <Function test_pytest_uses_pyproject_toml_configuration>
+      <Function test_pytest_marker_filtering_works>
+      <Function test_marker_example>
+      <Function test_pytest_testpaths_configuration>
+      <Function test_property_pytest_accepts_all_configured_markers>
+      <Function test_pytest_coverage_configuration_preserved>
+      <Function test_direct_pytest_help_command>
+      <Function test_property_pytest_accepts_standard_flags>
+    <Module test_property_artifact_actions_bugfix.py>
+      <Class TestArtifactActionsBugCondition>
+        <Function test_workflow_uses_correct_artifact_version[.github/workflows/ci.yml]>
+        <Function test_workflow_uses_correct_artifact_version[.github/workflows/code-quality.yml]>
+        <Function test_workflow_uses_correct_artifact_version[.github/workflows/deployment-orchestrator.yml]>
+        <Function test_workflow_uses_correct_artifact_version[.github/workflows/dependency-update.yml]>
+        <Function test_workflow_uses_correct_artifact_version[.github/workflows/monitoring.yml]>
+        <Function test_workflow_uses_correct_artifact_version[.github/workflows/performance-test.yml]>
+        <Function test_workflow_uses_correct_artifact_version[.github/workflows/release.yml]>
+        <Function test_workflow_uses_correct_artifact_version[.github/workflows/rollback.yml]>
+        <Function test_workflow_uses_correct_artifact_version[.github/workflows/security-scan.yml]>
+        <Function test_workflow_uses_correct_artifact_version[.github/workflows/staging-deploy.yml]>
+        <Function test_property_all_workflows_use_v4_artifacts>
+        <Function test_document_bug_condition_counterexamples>
+    <Module test_property_artifact_preservation.py>
+      <Class TestArtifactActionsPreservation>
+        <Function test_artifact_names_preserved[.github/workflows/ci.yml]>
+        <Function test_artifact_names_preserved[.github/workflows/code-quality.yml]>
+        <Function test_artifact_names_preserved[.github/workflows/deployment-orchestrator.yml]>
+        <Function test_artifact_names_preserved[.github/workflows/dependency-update.yml]>
+        <Function test_artifact_names_preserved[.github/workflows/monitoring.yml]>
+        <Function test_artifact_names_preserved[.github/workflows/performance-test.yml]>
+        <Function test_artifact_names_preserved[.github/workflows/release.yml]>
+        <Function test_artifact_names_preserved[.github/workflows/rollback.yml]>
+        <Function test_artifact_names_preserved[.github/workflows/security-scan.yml]>
+        <Function test_artifact_names_preserved[.github/workflows/staging-deploy.yml]>
+        <Function test_artifact_paths_preserved[.github/workflows/ci.yml]>
+        <Function test_artifact_paths_preserved[.github/workflows/code-quality.yml]>
+        <Function test_artifact_paths_preserved[.github/workflows/deployment-orchestrator.yml]>
+        <Function test_artifact_paths_preserved[.github/workflows/dependency-update.yml]>
+        <Function test_artifact_paths_preserved[.github/workflows/monitoring.yml]>
+        <Function test_artifact_paths_preserved[.github/workflows/performance-test.yml]>
+        <Function test_artifact_paths_preserved[.github/workflows/release.yml]>
+        <Function test_artifact_paths_preserved[.github/workflows/rollback.yml]>
+        <Function test_artifact_paths_preserved[.github/workflows/security-scan.yml]>
+        <Function test_artifact_paths_preserved[.github/workflows/staging-deploy.yml]>
+        <Function test_retention_periods_preserved[.github/workflows/ci.yml]>
+        <Function test_retention_periods_preserved[.github/workflows/code-quality.yml]>
+        <Function test_retention_periods_preserved[.github/workflows/deployment-orchestrator.yml]>
+        <Function test_retention_periods_preserved[.github/workflows/dependency-update.yml]>
+        <Function test_retention_periods_preserved[.github/workflows/monitoring.yml]>
+        <Function test_retention_periods_preserved[.github/workflows/performance-test.yml]>
+        <Function test_retention_periods_preserved[.github/workflows/release.yml]>
+        <Function test_retention_periods_preserved[.github/workflows/rollback.yml]>
+        <Function test_retention_periods_preserved[.github/workflows/security-scan.yml]>
+        <Function test_retention_periods_preserved[.github/workflows/staging-deploy.yml]>
+        <Function test_conditional_uploads_preserved[.github/workflows/ci.yml]>
+        <Function test_conditional_uploads_preserved[.github/workflows/code-quality.yml]>
+        <Function test_conditional_uploads_preserved[.github/workflows/deployment-orchestrator.yml]>
+        <Function test_conditional_uploads_preserved[.github/workflows/dependency-update.yml]>
+        <Function test_conditional_uploads_preserved[.github/workflows/monitoring.yml]>
+        <Function test_conditional_uploads_preserved[.github/workflows/performance-test.yml]>
+        <Function test_conditional_uploads_preserved[.github/workflows/release.yml]>
+        <Function test_conditional_uploads_preserved[.github/workflows/rollback.yml]>
+        <Function test_conditional_uploads_preserved[.github/workflows/security-scan.yml]>
+        <Function test_conditional_uploads_preserved[.github/workflows/staging-deploy.yml]>
+        <Function test_download_artifact_patterns_preserved[.github/workflows/ci.yml]>
+        <Function test_download_artifact_patterns_preserved[.github/workflows/code-quality.yml]>
+        <Function test_download_artifact_patterns_preserved[.github/workflows/deployment-orchestrator.yml]>
+        <Function test_download_artifact_patterns_preserved[.github/workflows/dependency-update.yml]>
+        <Function test_download_artifact_patterns_preserved[.github/workflows/monitoring.yml]>
+        <Function test_download_artifact_patterns_preserved[.github/workflows/performance-test.yml]>
+        <Function test_download_artifact_patterns_preserved[.github/workflows/release.yml]>
+        <Function test_download_artifact_patterns_preserved[.github/workflows/rollback.yml]>
+        <Function test_download_artifact_patterns_preserved[.github/workflows/security-scan.yml]>
+        <Function test_download_artifact_patterns_preserved[.github/workflows/staging-deploy.yml]>
+        <Function test_workflow_triggers_preserved[.github/workflows/ci.yml]>
+        <Function test_workflow_triggers_preserved[.github/workflows/code-quality.yml]>
+        <Function test_workflow_triggers_preserved[.github/workflows/deployment-orchestrator.yml]>
+        <Function test_workflow_triggers_preserved[.github/workflows/dependency-update.yml]>
+        <Function test_workflow_triggers_preserved[.github/workflows/monitoring.yml]>
+        <Function test_workflow_triggers_preserved[.github/workflows/performance-test.yml]>
+        <Function test_workflow_triggers_preserved[.github/workflows/release.yml]>
+        <Function test_workflow_triggers_preserved[.github/workflows/rollback.yml]>
+        <Function test_workflow_triggers_preserved[.github/workflows/security-scan.yml]>
+        <Function test_workflow_triggers_preserved[.github/workflows/staging-deploy.yml]>
+        <Function test_property_workflow_structure_preserved>
+    <Module test_property_decision_determinism.py>
+      <Class TestDecisionRuleDeterminism>
+        <Function test_review_decision_determinism_property>
+        <Function test_ticket_decision_determinism_property>
+        <Function test_critical_negative_review_rule_property>
+        <Function test_positive_review_rule_property>
+        <Function test_safety_rule_consistency_property>
+        <Function test_decision_confidence_bounds_property>
+        <Function test_complex_case_escalation_property>
+        <Function test_low_confidence_escalation_property>
+        <Function test_legal_threat_escalation_property>
+        <Function test_decision_structure_property>
+      <UnitTestCase TestDecisionRulesStateMachine>
+        <TestCaseFunction runTest>
+      <Class TestDecisionRuleEdgeCases>
+        <Function test_whitespace_content_property>
+        <Function test_empty_categories_property>
+        <Function test_invalid_input_handling_property>
+        <Function test_arbitrary_context_property>
+      <Class TestDecisionRulePerformance>
+        <Function test_batch_decision_performance_property>
+        <Function test_large_content_handling_property>
+      <Class TestDecisionRulesRealisticScenarios>
+        <Function test_emergency_scenario_property>
+        <Function test_legal_threat_scenario_property>
+    <Module test_property_multitenant_isolation.py>
+      <Class TestMultiTenantDataIsolation>
+        <Function test_user_organization_isolation_property>
+        <Function test_cross_organization_access_prevention_property>
+        <Function test_customer_data_isolation_property>
+        <Function test_dashboard_metrics_isolation_property>
+        <Function test_review_data_isolation_property>
+        <Function test_user_creation_organization_binding_property>
+        <Function test_user_id_uniqueness_across_organizations_property>
+        <Function test_organization_settings_isolation_property>
+      <UnitTestCase TestMultiTenantStateMachine>
+        <TestCaseFunction runTest>
+      <Class TestMultiTenantEdgeCases>
+        <Function test_invalid_organization_id_handling_property>
+        <Function test_null_organization_id_handling_property>
+        <Function test_empty_result_set_handling_property>
+      <Class TestMultiTenantPerformance>
+        <Function test_multi_organization_query_performance_property>
+      <Class TestMultiTenantRealisticScenarios>
+        <Function test_realistic_organization_scenario_property>
+        <Function test_multiple_organizations_isolation_property>
+    <Module test_property_recovery_compliance.py>
+      <Class TestRecoveryActionCompliance>
+        <Function test_action_recommendation_determinism_property>
+        <Function test_critical_churn_risk_compliance_property>
+        <Function test_high_churn_risk_compliance_property>
+        <Function test_negative_review_response_compliance_property>
+        <Function test_neutral_review_response_compliance_property>
+        <Function test_high_value_customer_compliance_property>
+        <Function test_inactive_customer_reactivation_compliance_property>
+        <Function test_action_prioritization_compliance_property>
+        <Function test_action_scheduling_compliance_property>
+        <Function test_approval_requirement_compliance_property>
+      <UnitTestCase TestRecoveryActionStateMachine>
+        <TestCaseFunction runTest>
+      <Class TestRecoveryActionEdgeCases>
+        <Function test_invalid_customer_handling_property>
+        <Function test_arbitrary_trigger_context_property>
+        <Function test_invalid_risk_values_property>
+      <Class TestRecoveryActionPerformance>
+        <Function test_batch_recommendation_performance_property>
+      <Class TestRecoveryActionRealisticScenarios>
+        <Function test_high_risk_customer_scenario_property>
+        <Function test_review_trigger_scenario_property>
+    <Module test_property_response_safety.py>
+      <Class TestResponseGenerationSafety>
+        <Function test_content_sanitization_safety_property>
+        <Function test_content_validation_safety_property>
+        <Function test_review_response_generation_safety_property>
+        <Function test_harmful_content_detection_property>
+        <Function test_profanity_filtering_property>
+        <Function test_rate_limiting_safety_property>
+      <Class TestResponseGenerationEdgeCases>
+        <Function test_whitespace_only_content_property>
+        <Function test_special_characters_only_property>
+        <Function test_very_short_content_property>
+      <Class TestResponseGenerationPerformance>
+        <Function test_batch_sanitization_performance_property>
+      <Class TestResponseGenerationRealisticScenarios>
+        <Function test_realistic_review_response_scenario_property>
+    <Module test_property_sentiment_consistency.py>
+      <Class TestSentimentAnalysisConsistency>
+        <Function test_sentiment_score_bounds_property>
+        <Function test_sentiment_determinism_property>
+        <Function test_rating_sentiment_correlation_property>
+        <Function test_sentiment_label_consistency_property>
+        <Function test_unicode_handling_property>
+        <Function test_text_length_handling_property>
+        <Function test_case_insensitive_consistency_property>
+        <Function test_known_sentiment_words_property>
+        <Function test_confidence_calculation_property>
+      <Class TestSentimentAnalysisEdgeCases>
+        <Function test_whitespace_only_property>
+        <Function test_special_characters_only_property>
+        <Function test_numbers_only_property>
+        <Function test_empty_strings_property>
+      <UnitTestCase TestSentimentStateMachine>
+        <TestCaseFunction runTest>
+      <Class TestSentimentAnalysisRealisticData>
+        <Function test_positive_review_consistency>
+        <Function test_negative_review_consistency>
+        <Function test_neutral_review_consistency>
+    <Module test_sentiment_service.py>
+      <Class TestSentimentService>
+        <Coroutine test_analyze_sentiment_positive_review>
+        <Coroutine test_analyze_sentiment_negative_review>
+        <Coroutine test_analyze_sentiment_neutral_review>
+        <Coroutine test_analyze_sentiment_empty_content>
+        <Coroutine test_analyze_sentiment_with_negation>
+        <Coroutine test_analyze_sentiment_with_intensifiers>
+        <Coroutine test_analyze_sentiment_with_diminishers>
+        <Coroutine test_analyze_sentiment_rating_correlation>
+        <Coroutine test_analyze_sentiment_contextual_patterns>
+        <Function test_preprocess_content>
+        <Function test_check_negation_context>
+        <Function test_check_intensity_context>
+        <Function test_get_word_sentiment>
+        <Function test_apply_intensity>
+        <Function test_rating_to_sentiment>
+        <Function test_calculate_confidence>
+        <Function test_determine_emotion>
+        <Function test_get_sentiment_label>
+        <Coroutine test_validate_sentiment_score>
+        <Coroutine test_check_rating_sentiment_correlation>
+        <Coroutine test_analyze_sentiment_edge_cases>
+        <Coroutine test_analyze_sentiment_long_content>
+        <Coroutine test_analyze_sentiment_mixed_sentiment>
+        <Function test_analyze_patterns>
+        <Coroutine test_sentiment_consistency>
+        <Coroutine test_sentiment_score_bounds>
+    <Module test_support_ticket_api.py>
+      <Class TestSupportTicketAPI>
+        <Coroutine test_create_ticket>
+        <Coroutine test_list_tickets>
+        <Coroutine test_get_ticket>
+        <Coroutine test_update_ticket>
+        <Coroutine test_assign_ticket>
+        <Coroutine test_resolve_ticket>
+        <Coroutine test_analyze_ticket>
+        <Coroutine test_get_ticket_stats>
+    <Module test_urgency_service.py>
+      <Class TestUrgencyService>
+        <Coroutine test_classify_urgency_high_emergency>
+        <Coroutine test_classify_urgency_high_safety_concern>
+        <Coroutine test_classify_urgency_high_legal_threat>
+        <Coroutine test_classify_urgency_medium_service_issues>
+        <Coroutine test_classify_urgency_low_suggestion>
+        <Coroutine test_classify_urgency_empty_content>
+        <Coroutine test_classify_urgency_with_title>
+        <Coroutine test_classify_urgency_rating_correlation>
+        <Coroutine test_classify_urgency_sentiment_correlation>
+        <Coroutine test_classify_urgency_temporal_indicators>
+        <Coroutine test_classify_urgency_multiple_issues>
+        <Coroutine test_classify_urgency_length_factor>
+        <Function test_analyze_keywords_high_urgency>
+        <Function test_analyze_keywords_medium_urgency>
+        <Function test_analyze_keywords_low_urgency_indicators>
+        <Function test_analyze_patterns_escalation>
+        <Function test_analyze_patterns_repetition>
+        <Function test_analyze_temporal_indicators>
+        <Function test_calculate_rating_urgency>
+        <Function test_calculate_sentiment_urgency>
+        <Function test_calculate_length_factor>
+        <Function test_score_to_level>
+        <Function test_calculate_confidence>
+        <Function test_get_level_description>
+        <Coroutine test_validate_urgency_classification_consistent>
+        <Coroutine test_validate_urgency_classification_inconsistent_rating>
+        <Coroutine test_validate_urgency_classification_short_content>
+        <Coroutine test_validate_urgency_classification_no_keywords>
+        <Coroutine test_urgency_score_bounds>
+        <Coroutine test_urgency_consistency>
+        <Coroutine test_urgency_edge_cases>
+        <Coroutine test_urgency_complex_scenarios>
+
+=================================== ERRORS ====================================
+___________ ERROR collecting tests/test_security_implementation.py ____________
+tests\test_security_implementation.py:15: in <module>
+    from app.core.security_config import SecuritySettings, SecurityValidator
+app\core\security_config.py:359: in <module>
+    security_settings = SecuritySettings()
+venv\Lib\site-packages\pydantic_settings\main.py:167: in __init__
+    super().__init__(
+E   pydantic_core._pydantic_core.ValidationError: 15 validation errors for SecuritySettings
+E   database_url
+E     Extra inputs are not permitted [type=extra_forbidden, input_value='postgresql://postgres:Ca...pabase.co:5432/postgres', input_type=str]
+E       For further information visit https://errors.pydantic.dev/2.10/v/extra_forbidden
+E   redis_url
+E     Extra inputs are not permitted [type=extra_forbidden, input_value='rediss://default:AYt6AAI...a-35706.upstash.io:6379', input_type=str]
+E       For further information visit https://errors.pydantic.dev/2.10/v/extra_forbidden
+E   secret_key
+E     Extra inputs are not permitted [type=extra_forbidden, input_value='8tEej368z0k_WKucA8sS49gPDogv_Bo2RFW9sgD4Ers', input_type=str]
+E       For further information visit https://errors.pydantic.dev/2.10/v/extra_forbidden
+E   access_token_expire_minutes
+E     Extra inputs are not permitted [type=extra_forbidden, input_value='10080', input_type=str]
+E       For further information visit https://errors.pydantic.dev/2.10/v/extra_forbidden
+E   api_v1_str
+E     Extra inputs are not permitted [type=extra_forbidden, input_value='/api/v1', input_type=str]
+E       For further information visit https://errors.pydantic.dev/2.10/v/extra_forbidden
+E   project_name
+E     Extra inputs are not permitted [type=extra_forbidden, input_value='Revive AI', input_type=str]
+E       For further information visit https://errors.pydantic.dev/2.10/v/extra_forbidden
+E   allowed_hosts
+E     Extra inputs are not permitted [type=extra_forbidden, input_value='http://localhost:3000,http://localhost:8000', input_type=str]
+E       For further information visit https://errors.pydantic.dev/2.10/v/extra_forbidden
+E   mistral_api_key
+E     Extra inputs are not permitted [type=extra_forbidden, input_value='W87uvb1W1ABTMuM8XD8y320aFbzI0gEc', input_type=str]
+E       For further information visit https://errors.pydantic.dev/2.10/v/extra_forbidden
+E   gemini_api_key
+E     Extra inputs are not permitted [type=extra_forbidden, input_value='your-gemini-api-key-here', input_type=str]
+E       For further information visit https://errors.pydantic.dev/2.10/v/extra_forbidden
+E   default_llm_provider
+E     Extra inputs are not permitted [type=extra_forbidden, input_value='openai', input_type=str]
+E       For further information visit https://errors.pydantic.dev/2.10/v/extra_forbidden
+E   celery_broker_url
+E     Extra inputs are not permitted [type=extra_forbidden, input_value='rediss://default:AYt6AAI...a-35706.upstash.io:6379', input_type=str]
+E       For further information visit https://errors.pydantic.dev/2.10/v/extra_forbidden
+E   celery_result_backend
+E     Extra inputs are not permitted [type=extra_forbidden, input_value='rediss://default:AYt6AAI...a-35706.upstash.io:6379', input_type=str]
+E       For further information visit https://errors.pydantic.dev/2.10/v/extra_forbidden
+E   debug
+E     Extra inputs are not permitted [type=extra_forbidden, input_value='true', input_type=str]
+E       For further information visit https://errors.pydantic.dev/2.10/v/extra_forbidden
+E   log_level
+E     Extra inputs are not permitted [type=extra_forbidden, input_value='INFO', input_type=str]
+E       For further information visit https://errors.pydantic.dev/2.10/v/extra_forbidden
+E   environment
+E     Extra inputs are not permitted [type=extra_forbidden, input_value='development', input_type=str]
+E       For further information visit https://errors.pydantic.dev/2.10/v/extra_forbidden
+
+---------- coverage: platform win32, python 3.13.5-final-0 -----------
+Name                                              Stmts   Miss   Cover   Missing
+--------------------------------------------------------------------------------
+app\__init__.py                                       0      0 100.00%
+app\api\__init__.py                                   0      0 100.00%
+app\api\v1\__init__.py                                0      0 100.00%
+app\api\v1\api.py                                    14     14   0.00%   5-40
+app\api\v1\endpoints\__init__.py                      0      0 100.00%
+app\api\v1\endpoints\agents.py                      132    105  20.45%   47-132, 152-192, 205-230, 246-294, 311-355, 368-371, 385-413
+app\api\v1\endpoints\auth.py                        107     76  28.97%   42-49, 62-74, 89-95, 107-114, 129-151, 168-179, 194-198, 213-221, 234-240, 253-266
+app\api\v1\endpoints\billing.py                      95     95   0.00%   3-258
+app\api\v1\endpoints\customers.py                   101     54  46.53%   66-142, 158-166, 185-237, 252-266, 282-288, 303-309
+app\api\v1\endpoints\dashboard.py                   176    139  21.02%   72-113, 132-150, 172-188, 216-250, 278-297, 319-362, 385-406, 428-448, 466-498, 529-590, 601-609
+app\api\v1\endpoints\health.py                       55     55   0.00%   5-151
+app\api\v1\endpoints\privacy.py                     307    307   0.00%   5-660
+app\api\v1\endpoints\reviews.py                     113     81  28.32%   47-92, 105-184, 212-228, 254-270, 283-292, 306-313, 326-339, 359-383, 390-398
+app\api\v1\endpoints\support_tickets.py              76     76   0.00%   3-355
+app\api\v1\endpoints\users.py                        97     32  67.01%   83-93, 107-116, 130-141, 156-166, 181-190, 204-212, 226-233, 247-251, 265-274, 286-294, 307-311, 336-349, 362-371
+app\api\v1\endpoints\webhooks.py                    300    246  18.00%   42-86, 102-125, 143-165, 179-203, 213-227, 232-265, 270-275, 280-285, 290-304, 317-320, 342-386, 404-450, 468-513, 526-551, 565-578, 591-612, 623-637, 642-656, 663-673, 678-684, 689-699, 704-710, 715-730, 735-740, 745-755, 762-777, 782-796
+app\api\versioning.py                               123    123   0.00%   5-280
+app\core\__init__.py                                  0      0 100.00%
+app\core\celery.py                                   43     14  67.44%   94-97, 108, 117, 126, 136-138, 151-152, 159-161, 171-172, 177
+app\core\compliance_reporting.py                    248    248   0.00%   5-833
+app\core\config.py                                   37      3  91.89%   40-42
+app\core\consent_management.py                      209    209   0.00%   5-628
+app\core\data_retention.py                          207    207   0.00%   5-657
+app\core\database.py                                 35     15  57.14%   39-43, 48-52, 58-73, 82-86
+app\core\dependencies.py                             97     46  52.58%   29-55, 68-74, 84, 100-101, 111-117, 125-133, 140, 148-156, 169-177, 186, 190, 194, 203
+app\core\encryption.py                              215    215   0.00%   5-591
+app\core\error_tracking.py                          167    167   0.00%   5-494
+app\core\exceptions.py                               61     61   0.00%   5-221
+app\core\gdpr_compliance.py                         262    262   0.00%   5-880
+app\core\logging_config.py                           98     98   0.00%   5-442
+app\core\metrics.py                                 237    237   0.00%   5-471
+app\core\middleware.py                              302    302   0.00%   5-1003
+app\core\monitoring_middleware.py                   123    123   0.00%   5-443
+app\core\openapi.py                                  36     36   0.00%   5-263
+app\core\permissions.py                             108     32  70.37%   134, 139-140, 147-148, 155-156, 161-162, 170-172, 182-184, 196-197, 205, 210-217, 227-231, 235, 239, 243, 249, 255
+app\core\privacy_policy.py                          106    106   0.00%   5-1058
+app\core\rate_limiting.py                           185    132  28.65%   143-172, 187-202, 216-241, 251-261, 274-317, 334-369, 382-408, 416-445, 450-467, 472-506, 513-516
+app\core\redis.py                                   222    158  28.83%   23, 29-30, 34-36, 40-42, 46-48, 52-54, 58-60, 64-70, 76-77, 81-89, 95-98, 102-104, 108-110, 124-125, 133-150, 163-171, 176-177, 182-190, 195-196, 201-202, 207, 222-238, 248-277, 287-317, 322-329, 338, 375-433, 440-445, 450-473, 479
+app\core\security.py                                174    109  37.36%   57-78, 83-92, 97-116, 125-135, 140-150, 155-160, 165, 170, 175, 181-201, 208-249, 261-274, 279-282, 287-308, 313, 318, 323, 328, 333, 340-344, 348, 369-382, 391-400
+app\core\security_config.py                         141     41  70.92%   132, 138, 152, 290-327, 332-355, 362-371
+app\core\security_middleware.py                     257    257   0.00%   5-677
+app\core\sql_protection.py                          224    179  20.09%   23-26, 116-141, 158-180, 186-193, 200-206, 212-218, 225-228, 232-241, 246-249, 254-269, 274-280, 284-295, 299-306, 310-317, 324, 337-365, 369-397, 404-442, 446-466, 472-492, 499-500, 518-546, 559-577
+app\core\subscription_middleware.py                  23     23   0.00%   6-57
+app\core\validation.py                              239    179  25.10%   22-25, 99-137, 153-179, 196-224, 240-297, 311-329, 334-339, 347-352, 360-365, 374-380, 386-387, 396-402, 407-413, 418-431, 436-460, 465-483, 488-506, 515-522, 527-539, 544-549, 556-563, 569-574, 580-585
+app\main.py                                          19      2  89.47%   25, 58
+app\models\__init__.py                                8      0 100.00%
+app\models\agent_decision.py                        133     56  57.89%   134, 139, 144, 153, 158-162, 167-177, 181-185, 189-192, 196-200, 204-205, 209-213, 217-219, 223-225, 229-240, 244
+app\models\customer.py                              131     70  46.56%   92-99, 104-117, 122-135, 140-143, 148-152, 157, 162, 169-170, 174-175, 179-194, 198-204, 208-212, 216-218, 222-223, 227
+app\models\embedding.py                             128    128   0.00%   3-318
+app\models\organization.py                           34      7  79.41%   61, 66, 70, 74-76, 80
+app\models\recovery_action.py                       160     60  62.50%   167, 172, 182, 187-189, 194-196, 201, 210-214, 219-223, 227-228, 232-235, 239-242, 246-252, 256-261, 265-272, 276-278, 282-284, 288-290, 294-296, 300-302, 306
+app\models\review.py                                117     38  67.52%   151, 156, 161, 166, 171-184, 189-195, 199-203, 207-208, 212, 216-220, 224-229, 233
+app\models\subscription.py                          104    104   0.00%   3-303
+app\models\support_ticket.py                        158     71  55.06%   145, 154, 159-173, 178-183, 188-192, 197-201, 206-219, 223-228, 232-236, 240-246, 250-253, 257-258, 262-269, 273-275, 279-285, 289-291, 295
+app\models\user.py                                   74     28  62.16%   87-94, 99, 104, 109-113, 117, 121, 125-131, 135-139, 143, 147-175
+app\schemas\__init__.py                              11      0 100.00%
+app\schemas\agent.py                                179     19  89.39%   25-27, 67-69, 181-190, 216-222
+app\schemas\auth.py                                 102     24  76.47%   24-29, 34, 47, 74, 85-90, 101-106, 134-136, 153-155
+app\schemas\base.py                                 166     44  73.49%   42, 66-68, 90-92, 144-147, 153-159, 164-179, 184-186, 191-193, 198-200, 276-278, 290-292, 300, 304-306
+app\schemas\billing.py                              127    127   0.00%   3-203
+app\schemas\compat.py                                 9      9   0.00%   5-22
+app\schemas\customer.py                             120      7  94.17%   192-202, 268-270
+app\schemas\dashboard.py                            112      0 100.00%
+app\schemas\error.py                                 36     36   0.00%   5-189
+app\schemas\review.py                               178     41  76.97%   29-31, 35-37, 77-93, 98-117, 123-127
+app\schemas\support_ticket.py                       113      6  94.69%   41-43, 62-64
+app\services\__init__.py                              0      0 100.00%
+app\services\agent_decision_service.py              179    179   0.00%   5-499
+app\services\agent_engine.py                        111     77  30.63%   46-51, 72-144, 164-235, 254-295, 306-332, 343-364, 368, 384, 404-427, 431-457
+app\services\auth_service.py                        139    104  25.18%   37-70, 78-121, 128-153, 167-206, 213-217, 222-223, 228-232, 237-242, 249-269, 274-290, 298-323
+app\services\billing_service.py                     223    223   0.00%   3-560
+app\services\categorization_service.py              119     87  26.89%   295-346, 355-381, 386-398, 403-420, 427-438, 449, 466-494, 523-546
+app\services\customer_risk_service.py               155    124  20.00%   27-35, 53-63, 73-83, 89-111, 117-149, 153-165, 172-236, 243-272, 278-299, 306-332, 338, 345-355, 361, 369, 376-399, 405, 423-433, 443-461, 468-490
+app\services\dashboard_service.py                   152    112  26.32%   29-30, 47-86, 94-187, 217-227, 239-331, 339-351, 360-409, 415-416, 422-432, 439, 446, 453, 461-492, 503-516, 525, 532, 546-565, 572-583, 594-624, 641-688
+app\services\decision_rules_engine.py                80     52  35.00%   36-38, 61-89, 102-130, 134, 276, 336, 368-379, 383-398, 403-415, 420-429, 439, 449, 493-511
+app\services\external\base_service.py               190    135  28.95%   66-74, 80-89, 106-236, 240-251, 256-266, 270-277, 281-292, 296-301, 320-355, 359-365, 376-380, 384, 402-403, 407, 411-423, 427-435, 439-443
+app\services\external\google_reviews.py             163    127  22.09%   43-50, 54, 61-80, 84-103, 109-143, 149-203, 209-231, 239-263, 277-284, 288, 313-315, 319-353, 359-372, 383-390, 398
+app\services\llm\__init__.py                         11      0 100.00%
+app\services\llm\base_provider.py                    84     31  63.10%   81-84, 91-92, 117-119, 206-233, 249, 274, 292-312
+app\services\llm\mistral_provider.py                101     73  27.72%   48-82, 86, 90-91, 97-102, 106-143, 149-163, 167, 178, 182-183, 190-212, 226-235, 239-270, 274, 284, 296, 318-340
+app\services\llm\mock_provider.py                    72     52  27.78%   36-42, 71, 76, 80-105, 125-137, 141, 145, 149, 153-172, 176-190, 200-201, 210, 214, 218
+app\services\llm\openai_provider.py                  91     69  24.18%   40-47, 64, 68-72, 78-112, 118-131, 135, 142, 146, 151-173, 187-197, 201-232, 236, 246, 258, 280-301
+app\services\llm\prompt_templates.py                167     96  42.51%   84, 103-111, 116-139, 146-153, 157, 164-166, 171-345, 415, 419, 425, 433, 443-447, 466-484, 499-522, 532-566, 570-574, 593-633, 643-645
+app\services\llm\provider_factory.py                 91     62  31.87%   23-54, 60, 64-65, 69, 75-78, 85-96, 111-120, 134-145, 149, 153, 162-165, 174-186, 195-209, 225-226, 230, 234, 251-253, 258-259, 264-265
+app\services\llm\response_generation_service.py     197    136  30.96%   53-54, 62-77, 97-119, 140-202, 209-211, 216-225, 229-247, 251-277, 284, 288-293, 306-312, 323-334, 347-360, 373-386, 400-414, 429-515, 522-532, 536-546, 550-577, 581, 591, 595, 608-610
+app\services\metrics_cache.py                       157    113  28.03%   57-88, 92-101, 105-115, 119-124, 130-142, 146-186, 209-240, 260-265, 272-278, 285-290, 297-303, 314-316, 322-324, 328-342, 346-373, 378
+app\services\platform_integration_service.py          8      8   0.00%   13-76
+app\services\realtime_metrics.py                    149    112  24.83%   31-53, 64-85, 98-126, 130-150, 154-171, 179-212, 216-220, 241-256, 261-269, 274-300, 307-312, 319-342, 350-351, 358-359, 366-367
+app\services\recovery_execution_service.py          124    102  17.74%   26-32, 39-92, 103-114, 118-135, 141-161, 167-187, 193-199, 212-218, 232-235, 249, 263-314, 325-366
+app\services\recovery_metrics_service.py            106    106   0.00%   8-415
+app\services\recovery_recommendation_service.py     141    113  19.86%   28-45, 74-94, 100-110, 120-169, 175-230, 236-282, 288-318, 324-377, 383-400, 406-424, 430-460, 466-490, 496-525, 535-568, 574-592, 598-618
+app\services\review_service.py                      133    108  18.80%   35-90, 104-166, 173-185, 193-222, 233-320, 340-362, 373-391
+app\services\review_validation.py                    20     20   0.00%   5-70
+app\services\sentiment_service.py                   158    113  28.48%   186-259, 267-291, 297-300, 307-315, 320-325, 330-342, 347-359, 365, 372-395, 400-409, 416, 427-436, 441, 448-453
+app\services\support_ticket_service.py              192    192   0.00%   3-493
+app\services\urgency_service.py                     165    123  25.45%   174-233, 244-279, 284-299, 304-323, 328-341, 346-355, 360-369, 374-379, 390-427, 438, 450-455, 464-487
+app\services\user_service.py                        149    113  24.16%   35-58, 65-74, 90-123, 135-151, 165-208, 220-265, 276-295, 303-310, 319-343, 357-361, 375-416, 432-469
+app\services\validation_service.py                  193    193   0.00%   5-433
+app\tasks\__init__.py                                 0      0 100.00%
+app\tasks\metrics_tasks.py                          139    139   0.00%   8-639
+app\tasks\monitoring_tasks.py                       172    172   0.00%   8-598
+app\tasks\recovery_tasks.py                         164    164   0.00%   8-514
+app\tasks\review_tasks.py                           148    117  20.95%   37-62, 67-112, 124-162, 168-188, 215-231, 238-278, 298-320, 334-341, 346-362, 377-382, 387-419
+--------------------------------------------------------------------------------
+TOTAL                                             12614   9486  24.80%
+Coverage HTML written to dir htmlcov
+Coverage XML written to file coverage.xml
+
+Required test coverage of 20% reached. Total coverage: 24.80%
+=========================== short test summary info ===========================
+ERROR tests/test_security_implementation.py - pydantic_core._pydantic_core.Va...
+!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+=================== 587 tests collected, 1 error in 12.20s ====================

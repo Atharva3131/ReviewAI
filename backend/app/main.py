@@ -1,12 +1,23 @@
 """
 FastAPI application entry point
 """
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+
 from contextlib import asynccontextmanager
 
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
 # Import routers from v1 endpoints
-from app.api.v1.endpoints import auth, reviews, customers, dashboard, users, agents, webhooks
+from app.api.v1.endpoints import (
+    agents,
+    auth,
+    customers,
+    dashboard,
+    reviews,
+    users,
+    webhooks,
+)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -14,11 +25,12 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown
 
+
 app = FastAPI(
     title="ReviewAI API",
     description="AI-powered review analysis and customer recovery platform",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # Add CORS middleware
@@ -38,6 +50,7 @@ app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["dashboar
 app.include_router(users.router, prefix="/api/v1/users", tags=["users"])
 app.include_router(agents.router, prefix="/api/v1/agents", tags=["agents"])
 app.include_router(webhooks.router, prefix="/api/v1/webhooks", tags=["webhooks"])
+
 
 @app.get("/health")
 async def health_check():

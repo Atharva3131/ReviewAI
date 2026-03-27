@@ -1,12 +1,14 @@
 """
 Health check endpoints for monitoring and load balancer health checks
 """
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from sqlalchemy import text
-from datetime import datetime, timezone
-import logging
+
 import asyncio
+import logging
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.redis import get_redis_client
@@ -26,7 +28,7 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "service": "revive-ai-backend"
+        "service": "revive-ai-backend",
     }
 
 
@@ -40,58 +42,58 @@ async def detailed_health_check(db: Session = Depends(get_db)):
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "service": "revive-ai-backend",
         "version": "1.0.0",
-        "checks": {}
+        "checks": {},
     }
-    
+
     overall_healthy = True
-    
+
     # Database health check
     try:
         db.execute(text("SELECT 1"))
         health_status["checks"]["database"] = {
             "status": "healthy",
-            "message": "Database connection successful"
+            "message": "Database connection successful",
         }
     except Exception as e:
         logger.error(f"Database health check failed: {e}")
         health_status["checks"]["database"] = {
             "status": "unhealthy",
-            "message": f"Database connection failed: {str(e)}"
+            "message": f"Database connection failed: {str(e)}",
         }
         overall_healthy = False
-    
+
     # Redis health check
     try:
         redis_client = get_redis_client()
         await redis_client.ping()
         health_status["checks"]["redis"] = {
             "status": "healthy",
-            "message": "Redis connection successful"
+            "message": "Redis connection successful",
         }
     except Exception as e:
         logger.error(f"Redis health check failed: {e}")
         health_status["checks"]["redis"] = {
             "status": "unhealthy",
-            "message": f"Redis connection failed: {str(e)}"
+            "message": f"Redis connection failed: {str(e)}",
         }
         overall_healthy = False
-    
+
     # Memory and disk checks could be added here
     health_status["checks"]["memory"] = {
         "status": "healthy",
-        "message": "Memory usage within limits"
+        "message": "Memory usage within limits",
     }
-    
+
     health_status["checks"]["disk"] = {
-        "status": "healthy", 
-        "message": "Disk usage within limits"
+        "status": "healthy",
+        "message": "Disk usage within limits",
     }
-    
+
     # Update overall status
     if not overall_healthy:
         health_status["status"] = "unhealthy"
         raise HTTPException(status_code=503, detail=health_status)
-    
+
     return health_status
 
 
@@ -103,17 +105,17 @@ async def readiness_check(db: Session = Depends(get_db)):
     try:
         # Check database connection
         db.execute(text("SELECT 1"))
-        
+
         # Check Redis connection
         redis_client = get_redis_client()
         await redis_client.ping()
-        
+
         return {
             "status": "ready",
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "message": "Service is ready to accept traffic"
+            "message": "Service is ready to accept traffic",
         }
-    
+
     except Exception as e:
         logger.error(f"Readiness check failed: {e}")
         raise HTTPException(
@@ -121,8 +123,8 @@ async def readiness_check(db: Session = Depends(get_db)):
             detail={
                 "status": "not_ready",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "message": f"Service is not ready: {str(e)}"
-            }
+                "message": f"Service is not ready: {str(e)}",
+            },
         )
 
 
@@ -134,7 +136,7 @@ async def liveness_check():
     return {
         "status": "alive",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "message": "Service is alive"
+        "message": "Service is alive",
     }
 
 
@@ -145,7 +147,7 @@ async def metrics_endpoint():
     """
     # In a production environment, this would return Prometheus-style metrics
     # For now, return basic application metrics
-    
+
     return {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "metrics": {
@@ -154,5 +156,5 @@ async def metrics_endpoint():
             "active_connections": 0,  # Would be tracked by connection pool
             "memory_usage_bytes": 0,  # Would be tracked by system monitoring
             "cpu_usage_percent": 0,  # Would be tracked by system monitoring
-        }
+        },
     }

@@ -1,16 +1,18 @@
 """
 Privacy policy and terms of service management
 """
-from datetime import datetime, timezone
-from typing import Dict, List, Optional, Any
-from enum import Enum
+
 import logging
+from datetime import datetime, timezone
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 
 class PolicyType(Enum):
     """Types of policies"""
+
     PRIVACY_POLICY = "privacy_policy"
     TERMS_OF_SERVICE = "terms_of_service"
     COOKIE_POLICY = "cookie_policy"
@@ -19,21 +21,21 @@ class PolicyType(Enum):
 
 class PolicyVersion:
     """Policy version with content and metadata"""
-    
+
     def __init__(
         self,
         version: str,
         content: str,
         effective_date: datetime,
         created_at: datetime = None,
-        summary_of_changes: str = None
+        summary_of_changes: str = None,
     ):
         self.version = version
         self.content = content
         self.effective_date = effective_date
         self.created_at = created_at or datetime.now(timezone.utc)
         self.summary_of_changes = summary_of_changes
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
         return {
@@ -41,26 +43,28 @@ class PolicyVersion:
             "content": self.content,
             "effective_date": self.effective_date.isoformat(),
             "created_at": self.created_at.isoformat(),
-            "summary_of_changes": self.summary_of_changes
+            "summary_of_changes": self.summary_of_changes,
         }
 
 
 class PrivacyPolicyService:
     """Service for managing privacy policies and terms of service"""
-    
+
     def __init__(self):
-        self.policies: Dict[str, Dict[PolicyType, List[PolicyVersion]]] = {}  # org_id -> policy_type -> versions
+        self.policies: Dict[str, Dict[PolicyType, List[PolicyVersion]]] = (
+            {}
+        )  # org_id -> policy_type -> versions
         self._initialize_default_policies()
-    
+
     def _initialize_default_policies(self):
         """Initialize default policy templates"""
         self.policy_templates = {
             PolicyType.PRIVACY_POLICY: self._get_privacy_policy_template(),
             PolicyType.TERMS_OF_SERVICE: self._get_terms_of_service_template(),
             PolicyType.COOKIE_POLICY: self._get_cookie_policy_template(),
-            PolicyType.DATA_PROCESSING_AGREEMENT: self._get_dpa_template()
+            PolicyType.DATA_PROCESSING_AGREEMENT: self._get_dpa_template(),
         }
-    
+
     def _get_privacy_policy_template(self) -> str:
         """Get privacy policy template"""
         return """# Privacy Policy
@@ -233,7 +237,7 @@ You have the right to request human review of automated decisions that significa
 
 This Privacy Policy is effective as of {effective_date} and was last updated on {last_updated}.
 """
-    
+
     def _get_terms_of_service_template(self) -> str:
         """Get terms of service template"""
         return """# Terms of Service
@@ -424,7 +428,7 @@ For questions about these Terms:
 
 These Terms of Service are effective as of {effective_date} and were last updated on {last_updated}.
 """
-    
+
     def _get_cookie_policy_template(self) -> str:
         """Get cookie policy template"""
         return """# Cookie Policy
@@ -603,7 +607,7 @@ For questions about our use of cookies:
 
 This Cookie Policy is effective as of {effective_date} and was last updated on {last_updated}.
 """
-    
+
     def _get_dpa_template(self) -> str:
         """Get data processing agreement template"""
         return """# Data Processing Agreement
@@ -840,7 +844,7 @@ This DPA may be amended:
 
 This Data Processing Agreement is effective as of {effective_date} and was last updated on {last_updated}.
 """
-    
+
     def create_policy(
         self,
         organization_id: str,
@@ -848,13 +852,13 @@ This Data Processing Agreement is effective as of {effective_date} and was last 
         version: str = "1.0",
         custom_content: str = None,
         effective_date: datetime = None,
-        summary_of_changes: str = None
+        summary_of_changes: str = None,
     ) -> PolicyVersion:
         """Create a new policy version"""
-        
+
         if effective_date is None:
             effective_date = datetime.now(timezone.utc)
-        
+
         # Use custom content or template
         if custom_content:
             content = custom_content
@@ -862,62 +866,64 @@ This Data Processing Agreement is effective as of {effective_date} and was last 
             template = self.policy_templates[policy_type]
             content = template.format(
                 effective_date=effective_date.strftime("%B %d, %Y"),
-                last_updated=datetime.now(timezone.utc).strftime("%B %d, %Y")
+                last_updated=datetime.now(timezone.utc).strftime("%B %d, %Y"),
             )
-        
+
         # Create policy version
         policy_version = PolicyVersion(
             version=version,
             content=content,
             effective_date=effective_date,
-            summary_of_changes=summary_of_changes
+            summary_of_changes=summary_of_changes,
         )
-        
+
         # Store policy
         if organization_id not in self.policies:
             self.policies[organization_id] = {}
-        
+
         if policy_type not in self.policies[organization_id]:
             self.policies[organization_id][policy_type] = []
-        
+
         self.policies[organization_id][policy_type].append(policy_version)
-        
-        logger.info(f"Created {policy_type.value} v{version} for organization {organization_id}")
-        
+
+        logger.info(
+            f"Created {policy_type.value} v{version} for organization {organization_id}"
+        )
+
         return policy_version
-    
+
     def get_current_policy(
-        self,
-        organization_id: str,
-        policy_type: PolicyType
+        self, organization_id: str, policy_type: PolicyType
     ) -> Optional[PolicyVersion]:
         """Get the current (latest) version of a policy"""
-        
-        if (organization_id not in self.policies or 
-            policy_type not in self.policies[organization_id]):
+
+        if (
+            organization_id not in self.policies
+            or policy_type not in self.policies[organization_id]
+        ):
             return None
-        
+
         versions = self.policies[organization_id][policy_type]
         if not versions:
             return None
-        
+
         # Return the most recent version
         return max(versions, key=lambda v: v.effective_date)
-    
+
     def get_policy_history(
-        self,
-        organization_id: str,
-        policy_type: PolicyType
+        self, organization_id: str, policy_type: PolicyType
     ) -> List[PolicyVersion]:
         """Get all versions of a policy"""
-        
-        if (organization_id not in self.policies or 
-            policy_type not in self.policies[organization_id]):
+
+        if (
+            organization_id not in self.policies
+            or policy_type not in self.policies[organization_id]
+        ):
             return []
-        
+
         versions = self.policies[organization_id][policy_type]
         return sorted(versions, key=lambda v: v.effective_date, reverse=True)
-    
+
     def update_policy(
         self,
         organization_id: str,
@@ -925,85 +931,82 @@ This Data Processing Agreement is effective as of {effective_date} and was last 
         new_content: str,
         version: str,
         effective_date: datetime = None,
-        summary_of_changes: str = None
+        summary_of_changes: str = None,
     ) -> PolicyVersion:
         """Update a policy with a new version"""
-        
+
         return self.create_policy(
             organization_id=organization_id,
             policy_type=policy_type,
             version=version,
             custom_content=new_content,
             effective_date=effective_date,
-            summary_of_changes=summary_of_changes
+            summary_of_changes=summary_of_changes,
         )
-    
+
     def get_policy_for_display(
-        self,
-        organization_id: str,
-        policy_type: PolicyType,
-        format_type: str = "html"
+        self, organization_id: str, policy_type: PolicyType, format_type: str = "html"
     ) -> Optional[Dict[str, Any]]:
         """Get policy formatted for display"""
-        
+
         policy = self.get_current_policy(organization_id, policy_type)
         if not policy:
             return None
-        
+
         # Convert markdown to HTML if requested
         content = policy.content
         if format_type == "html":
             # In a real implementation, use a markdown parser
             content = self._markdown_to_html(content)
-        
+
         return {
             "type": policy_type.value,
             "version": policy.version,
             "content": content,
             "effective_date": policy.effective_date.isoformat(),
             "last_updated": policy.created_at.isoformat(),
-            "format": format_type
+            "format": format_type,
         }
-    
+
     def _markdown_to_html(self, markdown_content: str) -> str:
         """Convert markdown to HTML (simplified)"""
         # This is a very basic conversion - in production, use a proper markdown parser
         html = markdown_content
-        
+
         # Headers
         html = html.replace("# ", "<h1>").replace("\n\n", "</h1>\n\n")
         html = html.replace("## ", "<h2>").replace("\n\n", "</h2>\n\n")
         html = html.replace("### ", "<h3>").replace("\n\n", "</h3>\n\n")
-        
+
         # Bold text
         html = html.replace("**", "<strong>", 1).replace("**", "</strong>", 1)
-        
+
         # Paragraphs
         paragraphs = html.split("\n\n")
         html_paragraphs = []
-        
+
         for para in paragraphs:
             if para.strip():
                 if not para.startswith("<h") and not para.startswith("<"):
                     para = f"<p>{para}</p>"
                 html_paragraphs.append(para)
-        
+
         return "\n\n".join(html_paragraphs)
-    
+
     def generate_policy_summary(self, organization_id: str) -> Dict[str, Any]:
         """Generate summary of all policies for an organization"""
-        
+
         if organization_id not in self.policies:
             return {
                 "organization_id": organization_id,
                 "policies": {},
                 "total_policies": 0,
-                "last_updated": None
+                "last_updated": None,
             }
-        
+
         policy_summary = {}
         last_updated = None
-        
+
         for policy_type, versions in self.policies[organization_id].items():
             if versions:
                 current = max(versions, key=lambda v: v.effective_date)
@@ -1011,33 +1014,33 @@ This Data Processing Agreement is effective as of {effective_date} and was last 
                     "current_version": current.version,
                     "effective_date": current.effective_date.isoformat(),
                     "total_versions": len(versions),
-                    "last_updated": current.created_at.isoformat()
+                    "last_updated": current.created_at.isoformat(),
                 }
-                
+
                 if last_updated is None or current.created_at > last_updated:
                     last_updated = current.created_at
-        
+
         return {
             "organization_id": organization_id,
             "policies": policy_summary,
             "total_policies": len(policy_summary),
-            "last_updated": last_updated.isoformat() if last_updated else None
+            "last_updated": last_updated.isoformat() if last_updated else None,
         }
-    
+
     def initialize_default_policies_for_org(self, organization_id: str):
         """Initialize default policies for a new organization"""
-        
+
         effective_date = datetime.now(timezone.utc)
-        
+
         for policy_type in PolicyType:
             self.create_policy(
                 organization_id=organization_id,
                 policy_type=policy_type,
                 version="1.0",
                 effective_date=effective_date,
-                summary_of_changes="Initial policy creation"
+                summary_of_changes="Initial policy creation",
             )
-        
+
         logger.info(f"Initialized default policies for organization {organization_id}")
 
 
@@ -1048,8 +1051,8 @@ _privacy_policy_service = None
 def get_privacy_policy_service() -> PrivacyPolicyService:
     """Get global privacy policy service instance"""
     global _privacy_policy_service
-    
+
     if _privacy_policy_service is None:
         _privacy_policy_service = PrivacyPolicyService()
-    
+
     return _privacy_policy_service

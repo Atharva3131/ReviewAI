@@ -1,9 +1,10 @@
 name: Dependency Updates
 
 on:
-  schedule:
-    # Run weekly on Mondays at 9 AM UTC
-    - cron: '0 9 * * 1'
+  # Schedule disabled - enable when ready for automated dependency updates
+  # schedule:
+  #   # Run weekly on Mondays at 9 AM UTC
+  #   - cron: '0 9 * * 1'
   workflow_dispatch:
     inputs:
       update_type:

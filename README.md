@@ -2,12 +2,6 @@
 
 Revive AI is a comprehensive SaaS platform that helps businesses monitor public reviews, analyze customer conversations, predict churn risks, and take automated recovery actions to improve ratings, retention, and revenue.
 
-## 🚀 Quick Start
-
-**New to the project?** Start here: [SETUP_GUIDE.md](SETUP_GUIDE.md)
-
-**Need a quick reference?** Check: [QUICK_REFERENCE.md](QUICK_REFERENCE.md)
-
 ## ✨ Features
 
 - **Review Intelligence Engine**: Automated sentiment analysis, urgency classification, and issue categorization

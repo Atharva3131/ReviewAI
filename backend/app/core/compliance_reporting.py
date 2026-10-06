@@ -54,11 +54,11 @@ class ComplianceMetric:
         self,
         name: str,
         value: Union[int, float, str],
-        target: Union[int, float, str] = None,
+        target: Optional[Union[int, float, str]] = None,
         status: str = "unknown",
-        description: str = None,
-        trend: str = None,
-    ):
+        description: Optional[str] = None,
+        trend: Optional[str] = None,
+    ) -> None:
         self.name = name
         self.value = value
         self.target = target
@@ -88,8 +88,8 @@ class ComplianceReport:
         report_type: ReportType,
         period_start: datetime,
         period_end: datetime,
-        generated_at: datetime = None,
-    ):
+        generated_at: Optional[datetime] = None,
+    ) -> None:
         self.report_id = report_id
         self.organization_id = organization_id
         self.report_type = report_type
@@ -101,13 +101,17 @@ class ComplianceReport:
         self.recommendations: List[str] = []
         self.issues: List[Dict[str, Any]] = []
 
-    def add_metric(self, metric: ComplianceMetric):
+    def add_metric(self, metric: ComplianceMetric) -> None:
         """Add metric to report"""
         self.metrics.append(metric)
 
     def add_issue(
-        self, severity: str, title: str, description: str, recommendation: str = None
-    ):
+        self,
+        severity: str,
+        title: str,
+        description: str,
+        recommendation: Optional[str] = None,
+    ) -> None:
         """Add compliance issue"""
         issue = {
             "severity": severity,  # "critical", "high", "medium", "low"
@@ -540,8 +544,8 @@ class ComplianceReportingService:
             )
 
     async def _add_consent_rate_metrics(
-        self, report: ComplianceReport, consent_service, organization_id: str
-    ):
+        self, report: ComplianceReport, consent_service: Any, organization_id: str
+    ) -> None:
         """Add consent rate metrics"""
 
         consent_report = consent_service.generate_consent_report(organization_id)
@@ -560,8 +564,8 @@ class ComplianceReportingService:
                 )
 
     async def _add_consent_withdrawal_metrics(
-        self, report: ComplianceReport, consent_service, organization_id: str
-    ):
+        self, report: ComplianceReport, consent_service: Any, organization_id: str
+    ) -> None:
         """Add consent withdrawal metrics"""
 
         # This would require tracking withdrawal rates over time

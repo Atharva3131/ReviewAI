@@ -1,7 +1,6 @@
 """Alembic environment configuration for Revive AI"""
 from logging.config import fileConfig
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import Connection, engine_from_config, pool
 from alembic import context
 import os
 import sys
@@ -11,9 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from app.core.config import settings
 from app.core.database import Base
-
-# Import all models to ensure they are registered with SQLAlchemy
-from app.models import organization, user, review, customer, support_ticket, recovery_action, agent_decision, embedding
+import app.models  # load all models for alembic autogenerate
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -34,7 +31,7 @@ target_metadata = Base.metadata
 # ... etc.
 
 
-def get_url():
+def get_url() -> str:
     """Get database URL from environment or config"""
     url = os.getenv("DATABASE_URL", settings.DATABASE_URL)
     # Convert to psycopg driver for sync operations
@@ -67,7 +64,7 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
-def do_run_migrations(connection) -> None:
+def do_run_migrations(connection: Connection) -> None:
     context.configure(connection=connection, target_metadata=target_metadata)
 
     with context.begin_transaction():
@@ -76,7 +73,7 @@ def do_run_migrations(connection) -> None:
 
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
-    configuration = config.get_section(config.config_ini_section)
+    configuration = config.get_section(config.config_ini_section) or {}
     configuration["sqlalchemy.url"] = get_url()
     
     connectable = engine_from_config(

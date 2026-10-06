@@ -89,7 +89,7 @@ celery_app.conf.update(
 
 # Task failure handling
 @celery_app.task(bind=True)
-def handle_task_failure(self, task_id: str, error: str, traceback: str):
+def handle_task_failure(self: Any, task_id: str, error: str, traceback: str) -> None:
     """Handle failed tasks by moving them to dead letter queue"""
     logger.error(f"Task {task_id} failed: {error}")
 
@@ -103,7 +103,7 @@ def handle_task_failure(self, task_id: str, error: str, traceback: str):
 
 # Worker lifecycle events
 @worker_init.connect
-def worker_init_handler(sender=None, conf=None, **kwargs):
+def worker_init_handler(sender: Any = None, conf: Any = None, **kwargs: Any) -> None:
     """Initialize worker resources"""
     logger.info(f"Worker {sender} initializing...")
 
@@ -112,7 +112,7 @@ def worker_init_handler(sender=None, conf=None, **kwargs):
 
 
 @worker_shutdown.connect
-def worker_shutdown_handler(sender=None, **kwargs):
+def worker_shutdown_handler(sender: Any = None, **kwargs: Any) -> None:
     """Cleanup worker resources"""
     logger.info(f"Worker {sender} shutting down...")
 
@@ -121,7 +121,7 @@ def worker_shutdown_handler(sender=None, **kwargs):
 
 # Task monitoring and health checks
 @celery_app.task(bind=True)
-def health_check(self):
+def health_check(self: Any) -> Dict[str, Any]:
     """Health check task for monitoring worker status"""
     return {
         "status": "healthy",

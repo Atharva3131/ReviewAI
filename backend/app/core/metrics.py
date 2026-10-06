@@ -319,22 +319,22 @@ metrics = MetricsCollector()
 # Convenience functions
 def increment_counter(
     name: str, value: float = 1.0, tags: Optional[Dict[str, str]] = None
-):
+) -> None:
     """Increment a counter metric"""
     metrics.increment_counter(name, value, tags)
 
 
-def set_gauge(name: str, value: float, tags: Optional[Dict[str, str]] = None):
+def set_gauge(name: str, value: float, tags: Optional[Dict[str, str]] = None) -> None:
     """Set a gauge metric value"""
     metrics.set_gauge(name, value, tags)
 
 
-def record_histogram(name: str, value: float, tags: Optional[Dict[str, str]] = None):
+def record_histogram(name: str, value: float, tags: Optional[Dict[str, str]] = None) -> None:
     """Record a value in a histogram"""
     metrics.record_histogram(name, value, tags)
 
 
-def time_operation(name: str, tags: Optional[Dict[str, str]] = None):
+def time_operation(name: str, tags: Optional[Dict[str, str]] = None) -> Any:
     """Context manager for timing operations"""
     return metrics.time_operation(name, tags)
 
@@ -342,7 +342,7 @@ def time_operation(name: str, tags: Optional[Dict[str, str]] = None):
 # Application-specific metrics functions
 def track_api_request(
     method: str, endpoint: str, status_code: int, response_time: float
-):
+) -> None:
     """Track API request metrics"""
     tags = {
         "method": method,
@@ -360,7 +360,7 @@ def track_api_request(
 
 def track_database_operation(
     operation: str, table: str, duration: float, rows_affected: Optional[int] = None
-):
+) -> None:
     """Track database operation metrics"""
     tags = {"operation": operation, "table": table}
 
@@ -373,7 +373,7 @@ def track_database_operation(
 
 def track_external_api_call(
     service: str, endpoint: str, status_code: int, response_time: float
-):
+) -> None:
     """Track external API call metrics"""
     tags = {
         "service": service,
@@ -389,7 +389,7 @@ def track_external_api_call(
         increment_counter("external_api.requests.errors", tags=tags)
 
 
-def track_background_task(task_name: str, duration: float, success: bool):
+def track_background_task(task_name: str, duration: float, success: bool) -> None:
     """Track background task metrics"""
     tags = {"task_name": task_name, "status": "success" if success else "failure"}
 
@@ -400,7 +400,7 @@ def track_background_task(task_name: str, duration: float, success: bool):
         increment_counter("background_tasks.failures", tags={"task_name": task_name})
 
 
-def track_user_action(action: str, user_id: str, organization_id: str):
+def track_user_action(action: str, user_id: str, organization_id: str) -> None:
     """Track user action metrics"""
     tags = {"action": action, "organization_id": organization_id}
 
@@ -416,7 +416,7 @@ def track_user_action(action: str, user_id: str, organization_id: str):
             logger.error(f"Failed to track unique users: {e}")
 
 
-def track_business_metric(metric_name: str, value: float, organization_id: str):
+def track_business_metric(metric_name: str, value: float, organization_id: str) -> None:
     """Track business-specific metrics"""
     tags = {"organization_id": organization_id}
 
@@ -424,7 +424,7 @@ def track_business_metric(metric_name: str, value: float, organization_id: str):
 
 
 # System metrics collection
-def collect_system_metrics():
+def collect_system_metrics() -> None:
     """Collect system-level metrics"""
     try:
         import psutil
@@ -460,7 +460,7 @@ def collect_system_metrics():
 if settings.ENVIRONMENT == "production":
     import threading
 
-    def system_metrics_loop():
+    def system_metrics_loop() -> None:
         while True:
             try:
                 collect_system_metrics()

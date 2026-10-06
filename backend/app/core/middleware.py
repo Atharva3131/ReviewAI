@@ -6,7 +6,7 @@ import logging
 import time
 import traceback
 import uuid
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 
 from fastapi import HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
@@ -505,69 +505,14 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
     }
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        """Process request and add authentication context"""
-
-        # Skip authentication for public paths
-        if request.url.path in self.PUBLIC_PATHS:
-            return await call_next(request)
-
-        # Skip authentication for static files and docs
-        if (
-            request.url.path.startswith("/static/")
-            or request.url.path.startswith("/docs")
-            or request.url.path.startswith("/redoc")
-        ):
-            return await call_next(request)
-
-        # Extract authorization header
-        authorization = request.headers.get("Authorization")
-        if not authorization:
-            return JSONResponse(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                content={"detail": "Authorization header missing"},
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        # Validate Bearer token format
-        try:
-            scheme, token = authorization.split(" ", 1)
-            if scheme.lower() != "bearer":
-                raise ValueError("Invalid scheme")
-        except ValueError:
-            return JSONResponse(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                content={"detail": "Invalid authorization header format"},
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        # Verify JWT token
-        try:
-            payload = SecurityService.verify_token(token)
-
-            # Add user context to request state
-            request.state.user_id = payload.get("sub")
-            request.state.organization_id = payload.get("org_id")
-            request.state.user_email = payload.get("email")
-            request.state.user_role = payload.get("role")
-            request.state.token_type = payload.get("type", "access")
-
-        except HTTPException as e:
-            return JSONResponse(
-                status_code=e.status_code,
-                content={"detail": e.detail},
-                headers=e.headers or {},
-            )
-        except Exception as e:
-            logger.error(f"Token verification error: {e}")
-            return JSONResponse(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                content={"detail": "Invalid token"},
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        # Process request
-        response = await call_next(request)
-        return response
+        """Process request and add single-user demo authentication context"""
+        request.state.user = {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "email": "demo@reviewai.com",
+            "role": "admin",
+            "organization_id": "00000000-0000-0000-0000-000000000001",
+        }
+        return await call_next(request)
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
@@ -575,7 +520,9 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     Enhanced middleware for comprehensive request logging and monitoring
     """
 
-    def __init__(self, app, log_body: bool = False, log_headers: bool = False):
+    def __init__(
+        self, app: Any, log_body: bool = False, log_headers: bool = False
+    ) -> None:
         super().__init__(app)
         self.log_body = log_body
         self.log_headers = log_headers
@@ -703,7 +650,9 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
         return response
 
-    async def _record_metrics(self, request_info: dict, response_info: dict):
+    async def _record_metrics(
+        self, request_info: dict, response_info: dict
+    ) -> None:
         """Record metrics for monitoring (placeholder for metrics system)"""
         try:
             # This would integrate with a metrics system like Prometheus, DataDog, etc.
@@ -718,12 +667,14 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
             # Record response time
             response_time_key = f"metrics:response_time:{request_info['path']}"
-            await redis_client.redis.lpush(
-                response_time_key, response_info["process_time"]
-            )
-            await redis_client.redis.ltrim(
-                response_time_key, 0, 99
-            )  # Keep last 100 measurements
+            if redis_client.redis:
+                from typing import cast
+                await cast(Any, redis_client.redis).lpush(
+                    response_time_key, response_info["process_time"]
+                )
+                await cast(Any, redis_client.redis).ltrim(
+                    response_time_key, 0, 99
+                )  # Keep last 100 measurements
             await redis_client.expire(response_time_key, 86400)
 
             # Record status codes
@@ -746,8 +697,11 @@ class MetricsCollector:
     """Utility class for collecting and retrieving application metrics"""
 
     @staticmethod
-    async def get_endpoint_metrics(endpoint: str = None, hours: int = 24) -> dict:
+    async def get_endpoint_metrics(
+        endpoint: Optional[str] = None, hours: int = 24
+    ) -> dict:
         """Get metrics for specific endpoint or all endpoints"""
+        from typing import cast
         from app.core.redis import redis_client
 
         if endpoint:
@@ -756,7 +710,7 @@ class MetricsCollector:
             # Get all endpoint keys
             pattern = "metrics:requests:*"
             if redis_client.redis:
-                keys = await redis_client.redis.keys(pattern)
+                keys = await cast(Any, redis_client.redis).keys(pattern)
                 endpoints = [key.split(":", 2)[2] for key in keys]
             else:
                 endpoints = []
@@ -770,7 +724,7 @@ class MetricsCollector:
             # Average response time
             response_times = []
             if redis_client.redis:
-                times = await redis_client.redis.lrange(
+                times = await cast(Any, redis_client.redis).lrange(
                     f"metrics:response_time:{ep}", 0, -1
                 )
                 response_times = [float(t) for t in times if t]
@@ -782,13 +736,16 @@ class MetricsCollector:
             # Error count
             error_count = await redis_client.get(f"metrics:errors:{ep}")
 
+            req_int = int(request_count) if request_count is not None else 0
+            err_int = int(error_count) if error_count is not None else 0
+
             metrics[ep] = {
-                "request_count": int(request_count) if request_count else 0,
+                "request_count": req_int,
                 "avg_response_time": round(avg_response_time, 3),
-                "error_count": int(error_count) if error_count else 0,
+                "error_count": err_int,
                 "error_rate": (
-                    round((int(error_count) / int(request_count)) * 100, 2)
-                    if request_count and int(request_count) > 0
+                    round((err_int / req_int) * 100, 2)
+                    if req_int > 0
                     else 0
                 ),
             }
@@ -826,7 +783,7 @@ class MetricsCollector:
         }
 
     @staticmethod
-    async def reset_metrics():
+    async def reset_metrics() -> None:
         """Reset all metrics (useful for testing)"""
         from app.core.redis import redis_client
 
@@ -844,7 +801,7 @@ class RateLimitingMiddleware(BaseHTTPMiddleware):
     Advanced rate limiting middleware with multiple strategies and tiers
     """
 
-    def __init__(self, app, use_sliding_window: bool = True):
+    def __init__(self, app: Any, use_sliding_window: bool = True) -> None:
         super().__init__(app)
         self.use_sliding_window = use_sliding_window
 

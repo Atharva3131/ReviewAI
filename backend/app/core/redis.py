@@ -3,61 +3,96 @@ Redis configuration and utilities
 """
 
 import json
+import logging
 import pickle
 import time
-from typing import Any, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import redis.asyncio as redis
 
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
+
 
 class RedisClient:
     """Redis client wrapper with common operations"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.redis: Optional[redis.Redis] = None
+        self._disabled: bool = False
 
-    async def connect(self):
-        """Connect to Redis"""
-        self.redis = redis.from_url(
-            settings.REDIS_URL, encoding="utf-8", decode_responses=True
-        )
+    async def connect(self) -> None:
+        """Connect to Redis with graceful failure handling"""
+        if not getattr(settings, "REDIS_ENABLED", True) or self._disabled:
+            return
+        try:
+            self.redis = redis.from_url(
+                settings.REDIS_URL, encoding="utf-8", decode_responses=True, socket_timeout=3
+            )
+            await self.redis.ping()
+        except Exception as e:
+            logger.warning(f"Redis connection unavailable ({e}). Continuing without Redis caching.")
+            self.redis = None
+            self._disabled = True
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         """Disconnect from Redis"""
         if self.redis:
-            await self.redis.close()
+            try:
+                await self.redis.close()
+            except Exception:
+                pass
 
     async def get(self, key: str) -> Optional[str]:
         """Get value by key"""
-        if not self.redis:
-            await self.connect()
-        return await self.redis.get(key)
+        if not getattr(settings, "REDIS_ENABLED", True) or self._disabled:
+            return None
+        try:
+            if not self.redis:
+                await self.connect()
+            if self.redis:
+                return await self.redis.get(key)
+        except Exception as e:
+            logger.warning(f"Redis get error for key '{key}': {e}")
+        return None
 
     async def set(self, key: str, value: str, expire: Optional[int] = None) -> bool:
         """Set key-value pair with optional expiration"""
-        if not self.redis:
-            await self.connect()
-        return await self.redis.set(key, value, ex=expire)
+        if not getattr(settings, "REDIS_ENABLED", True) or self._disabled:
+            return False
+        try:
+            if not self.redis:
+                await self.connect()
+            if self.redis:
+                return await self.redis.set(key, value, ex=expire)
+        except Exception as e:
+            logger.warning(f"Redis set error for key '{key}': {e}")
+        return False
 
     async def delete(self, key: str) -> int:
         """Delete key"""
         if not self.redis:
             await self.connect()
-        return await self.redis.delete(key)
+        if self.redis:
+            return await self.redis.delete(key)
+        return 0
 
     async def exists(self, key: str) -> bool:
         """Check if key exists"""
         if not self.redis:
             await self.connect()
-        return await self.redis.exists(key)
+        if self.redis:
+            return await self.redis.exists(key)
+        return False
 
     async def expire(self, key: str, seconds: int) -> bool:
         """Set expiration for key"""
         if not self.redis:
             await self.connect()
-        return await self.redis.expire(key, seconds)
+        if self.redis:
+            return await self.redis.expire(key, seconds)
+        return False
 
     async def get_json(self, key: str) -> Optional[dict]:
         """Get JSON value by key"""
@@ -80,12 +115,13 @@ class RedisClient:
         """Get pickled object by key"""
         if not self.redis:
             await self.connect()
-        value = await self.redis.get(key)
-        if value:
-            try:
-                return pickle.loads(value)
-            except (pickle.PickleError, TypeError):
-                return None
+        if self.redis:
+            value = await self.redis.get(key)
+            if value:
+                try:
+                    return pickle.loads(value)
+                except (pickle.PickleError, TypeError):
+                    return None
         return None
 
     async def set_object(
@@ -94,20 +130,26 @@ class RedisClient:
         """Set pickled object with optional expiration"""
         if not self.redis:
             await self.connect()
-        pickled_value = pickle.dumps(value)
-        return await self.redis.set(key, pickled_value, ex=expire)
+        if self.redis:
+            pickled_value = pickle.dumps(value)
+            return await self.redis.set(key, pickled_value, ex=expire)
+        return False
 
     async def increment(self, key: str, amount: int = 1) -> int:
         """Increment counter"""
         if not self.redis:
             await self.connect()
-        return await self.redis.incr(key, amount)
+        if self.redis:
+            return await self.redis.incr(key, amount)
+        return 0
 
     async def decrement(self, key: str, amount: int = 1) -> int:
         """Decrement counter"""
         if not self.redis:
             await self.connect()
-        return await self.redis.decr(key, amount)
+        if self.redis:
+            return await self.redis.decr(key, amount)
+        return 0
 
 
 # Global Redis client instance
@@ -240,13 +282,15 @@ class RateLimiter:
     @staticmethod
     async def sliding_window_rate_limit(
         key: str, limit: int, window: int = 60
-    ) -> tuple[bool, int, int]:
+    ) -> Tuple[bool, int, int]:
         """
         Sliding window rate limiting with more accurate counting
         Returns (is_limited, remaining_requests, reset_time)
         """
         if not redis_client.redis:
             await redis_client.connect()
+        if not redis_client.redis:
+            return False, limit, int(time.time()) + window
 
         now = int(time.time())
         pipeline = redis_client.redis.pipeline()
@@ -279,7 +323,7 @@ class RateLimiter:
     @staticmethod
     async def token_bucket_rate_limit(
         key: str, capacity: int, refill_rate: float, tokens_requested: int = 1
-    ) -> tuple[bool, int]:
+    ) -> Tuple[bool, int]:
         """
         Token bucket rate limiting
         Returns (is_allowed, tokens_remaining)
@@ -311,16 +355,18 @@ class RateLimiter:
         if bucket_data["tokens"] >= tokens_requested:
             bucket_data["tokens"] -= tokens_requested
             await redis_client.set_json(bucket_key, bucket_data, 3600)  # 1 hour expiry
-            return True, bucket_data["tokens"]
+            return True, int(bucket_data["tokens"])
         else:
             await redis_client.set_json(bucket_key, bucket_data, 3600)
-            return False, bucket_data["tokens"]
+            return False, int(bucket_data["tokens"])
 
     @staticmethod
-    async def get_rate_limit_info(key: str) -> dict:
+    async def get_rate_limit_info(key: str) -> Dict[str, Any]:
         """Get current rate limit information"""
         if not redis_client.redis:
             await redis_client.connect()
+        if not redis_client.redis:
+            return {"current_requests": 0, "window_remaining": 0, "key": key}
 
         # Try to get sliding window data
         count = await redis_client.redis.zcard(key)
@@ -342,7 +388,7 @@ class AdvancedRateLimiter:
     """Advanced rate limiting with multiple tiers and strategies"""
 
     # Rate limit tiers
-    RATE_LIMITS = {
+    RATE_LIMITS: Dict[str, Dict[str, int]] = {
         "anonymous": {"requests": 100, "window": 3600},  # 100 per hour
         "authenticated": {"requests": 1000, "window": 3600},  # 1000 per hour
         "premium": {"requests": 5000, "window": 3600},  # 5000 per hour
@@ -350,7 +396,7 @@ class AdvancedRateLimiter:
     }
 
     # Endpoint-specific limits
-    ENDPOINT_LIMITS = {
+    ENDPOINT_LIMITS: Dict[str, Dict[str, int]] = {
         "/api/v1/reviews/ingest": {"requests": 100, "window": 60},  # 100 per minute
         "/api/v1/reviews/analyze": {"requests": 200, "window": 60},  # 200 per minute
         "/api/v1/customers/recover": {"requests": 50, "window": 60},  # 50 per minute
@@ -365,14 +411,14 @@ class AdvancedRateLimiter:
         cls,
         identifier: str,
         user_tier: str = "anonymous",
-        endpoint: str = None,
+        endpoint: Optional[str] = None,
         use_sliding_window: bool = True,
-    ) -> dict:
+    ) -> Dict[str, Any]:
         """
         Comprehensive rate limit check
         Returns detailed rate limit information
         """
-        results = {}
+        results: Dict[str, Any] = {}
 
         # Check global user rate limit
         global_limit = cls.RATE_LIMITS.get(user_tier, cls.RATE_LIMITS["anonymous"])
@@ -434,7 +480,7 @@ class AdvancedRateLimiter:
 
     @classmethod
     async def get_user_tier(
-        cls, user_id: str = None, organization_id: str = None
+        cls, user_id: Optional[str] = None, organization_id: Optional[str] = None
     ) -> str:
         """Determine user tier for rate limiting"""
         if not user_id:

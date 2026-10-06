@@ -3,11 +3,10 @@
 import enum
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, List, Optional, cast
 
 from sqlalchemy import (
     DECIMAL,
-    Column,
     DateTime,
     Enum,
     ForeignKey,
@@ -16,7 +15,7 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.core.database import Base
@@ -60,14 +59,9 @@ class SupportTicket(Base):
 
     __tablename__ = "support_tickets"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    organization_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    customer_id = Column(
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    organization_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("customers.id", ondelete="CASCADE"),
         nullable=True,
@@ -75,55 +69,55 @@ class SupportTicket(Base):
     )
 
     # Ticket identification
-    external_id = Column(String(255), nullable=True, index=True)  # External system ID
-    ticket_number = Column(String(50), nullable=True, unique=True, index=True)
+    external_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)  # External system ID
+    ticket_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, unique=True, index=True)
 
     # Ticket content
-    subject = Column(String(500), nullable=False, index=True)
-    content = Column(Text, nullable=False)
+    subject: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Classification
-    status = Column(
+    status: Mapped[TicketStatus] = mapped_column(
         Enum(TicketStatus), default=TicketStatus.OPEN, nullable=False, index=True
     )
-    priority = Column(
+    priority: Mapped[TicketPriority] = mapped_column(
         Enum(TicketPriority), default=TicketPriority.MEDIUM, nullable=False, index=True
     )
-    category = Column(Enum(TicketCategory), nullable=True, index=True)
+    category: Mapped[Optional[TicketCategory]] = mapped_column(Enum(TicketCategory), nullable=True, index=True)
 
     # AI Analysis
-    sentiment_score = Column(DECIMAL(3, 2), nullable=True, index=True)  # 0.00 to 1.00
-    urgency_score = Column(DECIMAL(3, 2), nullable=True)  # AI-calculated urgency
-    escalation_risk = Column(DECIMAL(3, 2), nullable=True)  # Risk of escalation
+    sentiment_score: Mapped[Optional[float]] = mapped_column(DECIMAL(3, 2), nullable=True, index=True)  # 0.00 to 1.00
+    urgency_score: Mapped[Optional[float]] = mapped_column(DECIMAL(3, 2), nullable=True)  # AI-calculated urgency
+    escalation_risk: Mapped[Optional[float]] = mapped_column(DECIMAL(3, 2), nullable=True)  # Risk of escalation
 
     # Assignment and handling
-    assigned_to = Column(String(255), nullable=True)  # User ID or name
-    assigned_at = Column(DateTime(timezone=True), nullable=True)
+    assigned_to: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # User ID or name
+    assigned_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Resolution tracking
-    resolution = Column(Text, nullable=True)
-    resolved_at = Column(DateTime(timezone=True), nullable=True)
-    resolved_by = Column(String(255), nullable=True)
+    resolution: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # Customer satisfaction
-    satisfaction_rating = Column(Integer, nullable=True)  # 1-5 stars
-    satisfaction_feedback = Column(Text, nullable=True)
+    satisfaction_rating: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 1-5 stars
+    satisfaction_feedback: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Response time tracking
-    first_response_at = Column(DateTime(timezone=True), nullable=True)
-    last_response_at = Column(DateTime(timezone=True), nullable=True)
-    response_count = Column(Integer, default=0, nullable=False)
+    first_response_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_response_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    response_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # Metadata
-    source = Column(String(50), nullable=True)  # email, chat, phone, web
-    tags = Column(Text, nullable=True)  # Comma-separated tags
-    internal_notes = Column(Text, nullable=True)
+    source: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # email, chat, phone, web
+    tags: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Comma-separated tags
+    internal_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Timestamps
-    created_at = Column(
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    updated_at = Column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
@@ -131,7 +125,6 @@ class SupportTicket(Base):
     )
 
     # Relationships
-    organization = relationship("Organization", back_populates="support_tickets")
     customer = relationship("Customer", back_populates="support_tickets")
     recovery_actions = relationship("RecoveryAction", back_populates="ticket")
     # Note: agent_decisions relationship removed - use input_id query instead (polymorphic relationship)
@@ -170,7 +163,8 @@ class SupportTicket(Base):
             TicketPriority.LOW: 72,
         }
 
-        return hours_open > sla_hours.get(self.priority, 24)
+        priority_val = cast(TicketPriority, self.priority)
+        return bool(hours_open > sla_hours.get(priority_val, 24))
 
     @property
     def hours_open(self) -> float:
@@ -206,7 +200,7 @@ class SupportTicket(Base):
         if self.sentiment_score is None:
             return "Unknown"
 
-        score = float(self.sentiment_score)
+        score = float(cast(Any, self.sentiment_score))
         if score >= 0.7:
             return "Positive"
         elif score >= 0.5:
@@ -218,7 +212,7 @@ class SupportTicket(Base):
         else:
             return "Very Angry"
 
-    def generate_ticket_number(self):
+    def generate_ticket_number(self) -> None:
         """Generate unique ticket number"""
         if not self.ticket_number:
             # Format: ORG-YYYYMMDD-XXXX
@@ -227,37 +221,37 @@ class SupportTicket(Base):
             counter = str(self.id).replace("-", "")[:4].upper()
             self.ticket_number = f"{org_prefix}-{date_str}-{counter}"
 
-    def assign_to(self, user_id: str):
+    def assign_to(self, user_id: str) -> None:
         """Assign ticket to user"""
         self.assigned_to = user_id
         self.assigned_at = datetime.now(timezone.utc)
 
         if self.status == TicketStatus.OPEN:
-            self.status = TicketStatus.IN_PROGRESS
+            setattr(self, "status", TicketStatus.IN_PROGRESS)
 
-    def add_response(self):
+    def add_response(self) -> None:
         """Record a response to the ticket"""
         now = datetime.now(timezone.utc)
 
         if self.response_count == 0:
-            self.first_response_at = now
+            setattr(self, "first_response_at", now)
 
         self.last_response_at = now
         self.response_count += 1
 
-    def resolve(self, resolution: str, resolved_by: str):
+    def resolve(self, resolution: str, resolved_by: str) -> None:
         """Resolve the ticket"""
         self.resolution = resolution
         self.resolved_by = resolved_by
         self.resolved_at = datetime.now(timezone.utc)
         self.status = TicketStatus.RESOLVED
 
-    def close(self):
+    def close(self) -> None:
         """Close the ticket"""
         if self.status == TicketStatus.RESOLVED:
-            self.status = TicketStatus.CLOSED
+            setattr(self, "status", TicketStatus.CLOSED)
 
-    def reopen(self, reason: str = None):
+    def reopen(self, reason: Optional[str] = None) -> None:
         """Reopen the ticket"""
         self.status = TicketStatus.REOPENED
         self.resolved_at = None
@@ -268,7 +262,7 @@ class SupportTicket(Base):
             else:
                 self.internal_notes = f"Reopened: {reason}"
 
-    def set_satisfaction(self, rating: int, feedback: str = None):
+    def set_satisfaction(self, rating: int, feedback: Optional[str] = None) -> None:
         """Set customer satisfaction rating"""
         self.satisfaction_rating = max(1, min(5, rating))  # Clamp to 1-5
         if feedback:
@@ -290,7 +284,7 @@ class SupportTicket(Base):
             return []
         return [tag.strip() for tag in self.tags.split(",")]
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
         return {
             "id": str(self.id),
@@ -304,12 +298,14 @@ class SupportTicket(Base):
             "priority": self.priority.value,
             "category": self.category.value if self.category else None,
             "sentiment_score": (
-                float(self.sentiment_score) if self.sentiment_score else None
+                float(cast(Any, self.sentiment_score)) if self.sentiment_score is not None else None
             ),
             "sentiment_label": self.sentiment_label,
-            "urgency_score": float(self.urgency_score) if self.urgency_score else None,
+            "urgency_score": (
+                float(cast(Any, self.urgency_score)) if self.urgency_score is not None else None
+            ),
             "escalation_risk": (
-                float(self.escalation_risk) if self.escalation_risk else None
+                float(cast(Any, self.escalation_risk)) if self.escalation_risk is not None else None
             ),
             "assigned_to": self.assigned_to,
             "assigned_at": self.assigned_at.isoformat() if self.assigned_at else None,

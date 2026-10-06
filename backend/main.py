@@ -8,7 +8,7 @@ from fastapi.exceptions import RequestValidationError, HTTPException
 from contextlib import asynccontextmanager
 import logging
 import time
-from typing import Union
+from typing import Any, AsyncGenerator, Dict, Union
 
 from app.core.config import settings
 from app.api.v1.api import api_router
@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan events"""
     # Startup
     logger.info("Starting Revive AI API...")
@@ -152,10 +152,6 @@ Current version: **v1** (stable)
             "description": "Health check and system status endpoints"
         },
         {
-            "name": "auth",
-            "description": "Authentication and authorization endpoints"
-        },
-        {
             "name": "reviews",
             "description": "Review intelligence and management endpoints"
         },
@@ -221,7 +217,7 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 
 # Root endpoints
 @app.get("/", tags=["health"])
-async def root():
+async def root() -> Dict[str, Any]:
     """
     Root endpoint with basic API information
     
@@ -246,7 +242,7 @@ async def root():
 
 
 @app.get("/health", tags=["health"])
-async def health_check():
+async def health_check() -> Dict[str, Any]:
     """
     Comprehensive health check endpoint
     
@@ -300,7 +296,7 @@ async def health_check():
 
 
 @app.get("/docs/api", tags=["documentation"])
-async def api_documentation():
+async def api_documentation() -> Dict[str, Any]:
     """
     Get comprehensive API documentation in markdown format
     
@@ -319,7 +315,7 @@ async def api_documentation():
 
 
 @app.get("/openapi.json", tags=["documentation"], include_in_schema=False)
-async def get_openapi_schema():
+async def get_openapi_schema() -> Dict[str, Any]:
     """
     Get the OpenAPI schema in JSON format
     
@@ -336,7 +332,7 @@ async def get_openapi_schema():
 
 
 @app.get("/versions", tags=["versioning"])
-async def get_api_versions():
+async def get_api_versions() -> Dict[str, Any]:
     """
     Get information about supported API versions
     
@@ -375,7 +371,7 @@ async def get_api_versions():
 
 
 @app.get("/metrics", tags=["monitoring"])
-async def metrics():
+async def metrics() -> Dict[str, Any]:
     """Comprehensive metrics endpoint for monitoring"""
     from app.core.middleware import MetricsCollector
     
@@ -407,7 +403,7 @@ async def metrics():
 
 
 @app.get("/metrics/endpoint/{endpoint:path}", tags=["monitoring"])
-async def endpoint_metrics(endpoint: str):
+async def endpoint_metrics(endpoint: str) -> Dict[str, Any]:
     """Get metrics for a specific endpoint"""
     from app.core.middleware import MetricsCollector
     
@@ -431,7 +427,7 @@ async def endpoint_metrics(endpoint: str):
 
 
 @app.post("/metrics/reset", tags=["monitoring"])
-async def reset_metrics():
+async def reset_metrics() -> Dict[str, Any]:
     """Reset all metrics (admin only)"""
     from app.core.middleware import MetricsCollector
     

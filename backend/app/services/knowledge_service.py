@@ -1,5 +1,5 @@
 """
-Knowledge Retrieval Service (Simple RAG)
+Knowledge Base Service (Category & Policy Lookup)
 Store and retrieve business knowledge for response grounding
 """
 

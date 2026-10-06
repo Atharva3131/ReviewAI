@@ -5,27 +5,20 @@ Import all models to ensure they are registered with SQLAlchemy
 
 from .agent_decision import AgentDecision, DecisionStatus, DecisionType, InputType
 from .customer import Customer
-from .organization import Organization
+from .knowledge import BusinessKnowledge
 from .recovery_action import ActionPriority, ActionStatus, ActionType, RecoveryAction
 from .review import IssueCategory, Review, ReviewPlatform, ReviewStatus, UrgencyLevel
 from .support_ticket import SupportTicket, TicketCategory, TicketPriority, TicketStatus
-from .user import User, UserRole
-
-# Note: embedding model requires pgvector extension - enable it in Supabase first
-# from .embedding import Embedding, ContentType, EmbeddingModel, EmbeddingService
 
 __all__ = [
     # Models
-    "Organization",
-    "User",
-    "Review",
     "Customer",
+    "Review",
     "SupportTicket",
     "RecoveryAction",
     "AgentDecision",
-    # "Embedding",  # Requires pgvector extension
+    "BusinessKnowledge",
     # Enums
-    "UserRole",
     "ReviewPlatform",
     "UrgencyLevel",
     "ReviewStatus",
@@ -39,8 +32,4 @@ __all__ = [
     "InputType",
     "DecisionType",
     "DecisionStatus",
-    # "ContentType",  # Requires pgvector extension
-    # "EmbeddingModel",  # Requires pgvector extension
-    # Services
-    # "EmbeddingService"  # Requires pgvector extension
 ]

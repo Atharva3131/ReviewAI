@@ -3,13 +3,13 @@
 import enum
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import numpy as np
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Column, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.core.database import Base
@@ -41,8 +41,8 @@ class Embedding(Base):
 
     __tablename__ = "embeddings"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    organization_id = Column(
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=False,
@@ -50,34 +50,34 @@ class Embedding(Base):
     )
 
     # Content reference
-    content_type = Column(Enum(ContentType), nullable=False, index=True)
-    content_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    content_type: Mapped[ContentType] = mapped_column(Enum(ContentType), nullable=False, index=True)
+    content_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
 
     # Content snapshot (for reference)
-    content_text = Column(Text, nullable=False)
-    content_hash = Column(String(64), nullable=False, index=True)  # SHA-256 hash
+    content_text: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)  # SHA-256 hash
 
     # Vector embedding (1536 dimensions for OpenAI ada-002)
-    embedding = Column(Vector(1536), nullable=False)
+    embedding: Mapped[Any] = mapped_column(Vector(1536), nullable=False)
 
     # Model information
-    model_name = Column(Enum(EmbeddingModel), nullable=False, index=True)
-    model_version = Column(String(50), nullable=True)
-    embedding_dimensions = Column(Integer, default=1536, nullable=False)
+    model_name: Mapped[EmbeddingModel] = mapped_column(Enum(EmbeddingModel), nullable=False, index=True)
+    model_version: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    embedding_dimensions: Mapped[int] = mapped_column(Integer, default=1536, nullable=False)
 
     # Processing metadata
-    processing_time_ms = Column(Integer, nullable=True)
-    token_count = Column(Integer, nullable=True)
+    processing_time_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    token_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # Usage tracking
-    similarity_searches = Column(Integer, default=0, nullable=False)
-    last_used_at = Column(DateTime(timezone=True), nullable=True)
+    similarity_searches: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Timestamps
-    created_at = Column(
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    updated_at = Column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
@@ -87,7 +87,7 @@ class Embedding(Base):
     # Relationships
     organization = relationship("Organization", back_populates="embeddings")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<Embedding(id={self.id}, content_type='{self.content_type}', model='{self.model_name}')>"
 
     @property
@@ -98,7 +98,7 @@ class Embedding(Base):
         elif hasattr(self.embedding, "tolist"):
             return self.embedding.tolist()
         else:
-            return list(self.embedding)
+            return list(cast(Any, self.embedding))
 
     @property
     def embedding_array(self) -> np.ndarray:
@@ -111,9 +111,9 @@ class Embedding(Base):
         from datetime import timedelta
 
         threshold = datetime.now(timezone.utc) - timedelta(days=30)
-        return self.created_at < threshold
+        return bool(self.created_at < threshold)
 
-    def update_usage(self):
+    def update_usage(self) -> None:
         """Update usage statistics"""
         self.similarity_searches += 1
         self.last_used_at = datetime.now(timezone.utc)
@@ -134,24 +134,24 @@ class Embedding(Base):
         if norm_a == 0 or norm_b == 0:
             return 0.0
 
-        return dot_product / (norm_a * norm_b)
+        return float(dot_product / (norm_a * norm_b))
 
     @staticmethod
     def euclidean_distance(a: np.ndarray, b: np.ndarray) -> float:
         """Calculate Euclidean distance between two vectors"""
-        return np.linalg.norm(a - b)
+        return float(np.linalg.norm(a - b))
 
-    def to_dict(self, include_vector: bool = False):
+    def to_dict(self, include_vector: bool = False) -> Dict[str, Any]:
         """Convert to dictionary"""
-        data = {
+        data: Dict[str, Any] = {
             "id": str(self.id),
             "organization_id": str(self.organization_id),
             "content_type": self.content_type.value,
             "content_id": str(self.content_id),
             "content_text": (
-                self.content_text[:200] + "..."
-                if len(self.content_text) > 200
-                else self.content_text
+                str(self.content_text)[:200] + "..."
+                if len(str(self.content_text)) > 200
+                else str(self.content_text)
             ),
             "content_hash": self.content_hash,
             "model_name": self.model_name.value,
@@ -182,7 +182,7 @@ class EmbeddingService:
         session,
         organization_id: str,
         query_embedding: List[float],
-        content_type: ContentType = None,
+        content_type: Optional[ContentType] = None,
         limit: int = 10,
         similarity_threshold: float = 0.7,
     ) -> List[Tuple[Embedding, float]]:
@@ -233,7 +233,7 @@ class EmbeddingService:
         session,
         organization_id: str,
         query_text: str,
-        content_type: ContentType = None,
+        content_type: Optional[ContentType] = None,
         limit: int = 5,
     ) -> List[Tuple[str, str, float]]:
         """
@@ -265,9 +265,9 @@ class EmbeddingService:
         content_text: str,
         embedding_vector: List[float],
         model_name: EmbeddingModel = EmbeddingModel.OPENAI_ADA_002,
-        model_version: str = None,
-        processing_time_ms: int = None,
-        token_count: int = None,
+        model_version: Optional[str] = None,
+        processing_time_ms: Optional[int] = None,
+        token_count: Optional[int] = None,
     ) -> Embedding:
         """Create new embedding record"""
 
@@ -299,8 +299,8 @@ class EmbeddingService:
         embedding: Embedding,
         content_text: str,
         embedding_vector: List[float],
-        processing_time_ms: int = None,
-        token_count: int = None,
+        processing_time_ms: Optional[int] = None,
+        token_count: Optional[int] = None,
     ) -> Embedding:
         """Update existing embedding"""
 

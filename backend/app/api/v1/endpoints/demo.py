@@ -5,6 +5,7 @@ Simple ingestion for demonstration purposes
 
 import logging
 from datetime import datetime, timezone
+from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -47,7 +48,9 @@ class DemoReviewResponse(BaseModel):
     decision_category: str
     decision_urgency: int
     churn_risk: float
+    ml_churn_probability: float
     confidence: float
+    decision_provider: str   # which model actually ran: mock | laya | jev | llm
     policy_decision: str
     reasoning: str
 
@@ -56,7 +59,7 @@ class DemoReviewResponse(BaseModel):
 async def ingest_demo_review(
     request: DemoReviewRequest,
     db: AsyncSession = Depends(get_async_db),
-):
+) -> DemoReviewResponse:
     """
     Ingest and process a demo review
 
@@ -75,34 +78,39 @@ async def ingest_demo_review(
 
     try:
         # 1. Get or create customer
-        customer_email = f"{request.customer_name.lower().replace(' ', '_')}@demo.com"
-        stmt = select(Customer).where(Customer.email == customer_email)
-        result = await db.execute(stmt)
-        customer = result.scalars().first()
+        try:
+            customer_email = f"{request.customer_name.lower().replace(' ', '_')}@demo.com"
+            stmt = select(Customer).where(Customer.email == customer_email)
+            result = await db.execute(stmt)
+            customer = result.scalars().first()
 
-        if not customer:
-            customer = Customer(
-                email=customer_email,
-                name=request.customer_name,
-                phone=None,
-                notes="Demo customer",
+            if not customer:
+                customer = Customer(
+                    email=customer_email,
+                    name=request.customer_name,
+                    phone=None,
+                    notes="Demo customer",
+                )
+                db.add(customer)
+                await db.flush()
+
+            # 2. Create review
+            review = Review(
+                customer_id=customer.id,
+                platform=ReviewPlatform.GOOGLE,
+                external_review_id=f"demo-{datetime.now().timestamp()}",
+                rating=request.rating,
+                content=request.review_text,
+                reviewer_name=request.customer_name,
+                review_date=datetime.now(timezone.utc),
+                status=ReviewStatus.PENDING,
             )
-            db.add(customer)
+            db.add(review)
             await db.flush()
-
-        # 2. Create review
-        review = Review(
-            customer_id=customer.id,
-            platform=ReviewPlatform.GOOGLE,
-            external_review_id=f"demo-{datetime.now().timestamp()}",
-            rating=request.rating,
-            content=request.review_text,
-            reviewer_name=request.customer_name,
-            review_date=datetime.now(timezone.utc),
-            status=ReviewStatus.PENDING,
-        )
-        db.add(review)
-        await db.flush()
+            review_id = str(review.id)
+        except Exception as db_err:
+            logger.warning(f"Database unavailable for demo review persistence ({db_err}). Proceeding in memory.")
+            review_id = f"demo-review-{int(datetime.now().timestamp())}"
 
         # 3. Run sentiment analysis
         sentiment_result = await agent_engine.sentiment_service.analyze_sentiment(
@@ -128,7 +136,7 @@ async def ingest_demo_review(
         ml_result = await ml_model.predict(
             {
                 "rating": request.rating,
-                "urgency_level": int(
+                "urgency_level": (
                     ["low", "medium", "high"].index(
                         urgency_result.get("urgency_level", "medium")
                     )
@@ -145,20 +153,13 @@ async def ingest_demo_review(
         # 7. Validate policy
         policy_result = await policy_engine.validate_decision(structured_decision)
 
-        # Convert urgency_level to enum
-        urgency_level_enum = UrgencyLevel(
-            urgency_result.get("urgency_level", "medium")
-        )
-
-        # Update review with analysis
-        review.sentiment_score = sentiment_result.get("sentiment_score", 0.5)
-        review.urgency_level = urgency_level_enum
-        review.confidence_score = structured_decision.confidence
-
-        await db.commit()
+        try:
+            await db.commit()
+        except Exception:
+            pass
 
         return DemoReviewResponse(
-            review_id=str(review.id),
+            review_id=review_id,
             customer_name=request.customer_name,
             rating=request.rating,
             sentiment_score=sentiment_result.get("sentiment_score", 0.5),
@@ -166,31 +167,42 @@ async def ingest_demo_review(
             decision_category=structured_decision.category.value,
             decision_urgency=structured_decision.urgency,
             churn_risk=structured_decision.churn_risk_factor,
+            ml_churn_probability=ml_result.get("churn_probability", 0.5),
             confidence=structured_decision.confidence,
+            decision_provider=structured_decision.decision_provider,
             policy_decision=policy_result["strategy"].value,
             reasoning=policy_result.get("reason", ""),
         )
 
     except Exception as e:
         logger.error(f"Demo review ingestion failed: {e}", exc_info=True)
-        await db.rollback()
+        try:
+            await db.rollback()
+        except Exception:
+            pass
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/demo-status")
-async def demo_status():
-    """Get demo system status and available models"""
+async def demo_status() -> Dict[str, Any]:
+    """Get demo system status — reports which providers are actually active"""
+    from app.services.decision_model.factory import get_active_provider_name
     return {
         "status": "running",
         "version": "1.0.0",
+        "authentication": "disabled (single-user demo mode)",
         "components": {
-            "decision_model": "mock (laya placeholder)",
-            "ml_churn_model": "xgboost (trained on synthetic data)",
-            "policy_engine": "deterministic rules",
-            "knowledge_service": "simple knowledge base",
+            "decision_model": {
+                "active_provider": await get_active_provider_name(),
+                "available_providers": ["mock", "laya (unavailable)", "jev (unavailable)", "llm (requires API key)"],
+                "note": "Laya and JEV interfaces are ready but not connected to external APIs.",
+            },
+            "ml_churn_model": "xgboost — trained on synthetic demo data (not real customer data)",
+            "policy_engine": "deterministic rules — NOT AI-decided",
+            "knowledge_base": "category lookup — not vector/semantic search",
         },
         "endpoints": {
-            "ingest_review": "/demo/ingest-demo-review (POST)",
-            "status": "/demo/demo-status (GET)",
+            "ingest_review": "POST /api/v1/demo/ingest-demo-review",
+            "status": "GET /api/v1/demo/demo-status",
         },
     }

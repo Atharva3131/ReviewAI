@@ -13,6 +13,7 @@ from .base_provider import BaseLLMProvider, LLMProvider
 from .mistral_provider import MistralProvider
 from .mock_provider import MockLLMProvider
 from .openai_provider import OpenAIProvider
+from .bedrock_provider import BedrockLLMProvider
 
 
 class ProviderConfig:
@@ -36,6 +37,12 @@ class ProviderConfig:
                 "timeout": int(os.getenv("GEMINI_TIMEOUT", "30")),
                 "enabled": os.getenv("GEMINI_ENABLED", "false").lower() == "true",
             },
+            LLMProvider.BEDROCK: {
+                "aws_region": os.getenv("AWS_REGION", "us-east-1"),
+                "aws_access_key_id": os.getenv("AWS_ACCESS_KEY_ID"),
+                "aws_secret_access_key": os.getenv("AWS_SECRET_ACCESS_KEY"),
+                "enabled": os.getenv("LLM_PROVIDER", "").lower() == "bedrock" or os.getenv("BEDROCK_ENABLED", "false").lower() == "true",
+            },
             LLMProvider.MOCK: {
                 "simulate_errors": os.getenv("MOCK_SIMULATE_ERRORS", "false").lower()
                 == "true",
@@ -46,9 +53,11 @@ class ProviderConfig:
         }
 
         # Default provider selection
-        self.default_provider = LLMProvider(
-            os.getenv("DEFAULT_LLM_PROVIDER", LLMProvider.MOCK.value)
-        )
+        env_provider = os.getenv("LLM_PROVIDER") or os.getenv("DEFAULT_LLM_PROVIDER", LLMProvider.MOCK.value)
+        try:
+            self.default_provider = LLMProvider(env_provider.lower())
+        except ValueError:
+            self.default_provider = LLMProvider.MOCK
 
         # Fallback provider if default fails
         self.fallback_provider = LLMProvider(
@@ -86,7 +95,7 @@ class LLMProviderFactory:
         self._provider_classes: Dict[LLMProvider, Type[BaseLLMProvider]] = {
             LLMProvider.OPENAI: OpenAIProvider,
             LLMProvider.MOCK: MockLLMProvider,
-            # LLMProvider.GEMINI: GeminiProvider,  # Would be added when implemented
+            LLMProvider.BEDROCK: BedrockLLMProvider,
         }
         self._provider_instances: Dict[LLMProvider, BaseLLMProvider] = {}
 

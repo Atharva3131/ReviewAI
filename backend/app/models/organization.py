@@ -1,10 +1,12 @@
 """Organization model for multi-tenant architecture"""
 
 import uuid
+from datetime import datetime
+from typing import Any, Dict, Optional
 
-from sqlalchemy import JSON, Column, DateTime, String, Text
+from sqlalchemy import JSON, DateTime, String, Text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.core.database import Base
@@ -15,16 +17,16 @@ class Organization(Base):
 
     __tablename__ = "organizations"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    name = Column(String(255), nullable=False, index=True)
-    domain = Column(String(255), nullable=True, index=True)
-    settings = Column(JSON, default=dict, nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    domain: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    settings: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
 
     # Timestamps
-    created_at = Column(
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    updated_at = Column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),

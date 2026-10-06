@@ -2,11 +2,11 @@
 
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, cast
 
-from sqlalchemy import DECIMAL, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DECIMAL, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.core.database import Base
@@ -17,60 +17,55 @@ class Customer(Base):
 
     __tablename__ = "customers"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    organization_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    organization_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
 
     # Customer identification
-    email = Column(String(255), nullable=True, index=True)
-    phone = Column(String(50), nullable=True, index=True)
-    name = Column(String(255), nullable=True, index=True)
-    external_id = Column(String(255), nullable=True, index=True)  # CRM system ID
+    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
+    name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    external_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)  # CRM system ID
 
     # Risk assessment
-    churn_risk_score = Column(DECIMAL(3, 2), nullable=True, index=True)  # 0.00 to 1.00
-    bad_review_likelihood = Column(
+    churn_risk_score: Mapped[Optional[float]] = mapped_column(DECIMAL(3, 2), nullable=True, index=True)  # 0.00 to 1.00
+    bad_review_likelihood: Mapped[Optional[float]] = mapped_column(
         DECIMAL(3, 2), nullable=True, index=True
     )  # 0.00 to 1.00
 
     # Interaction tracking
-    last_interaction = Column(DateTime(timezone=True), nullable=True, index=True)
-    interaction_count = Column(Integer, default=0, nullable=False)
+    last_interaction: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    interaction_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # Customer context
-    context_summary = Column(Text, nullable=True)  # AI-generated summary
-    tags = Column(Text, nullable=True)  # Comma-separated tags
+    context_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # AI-generated summary
+    tags: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Comma-separated tags
 
     # Customer value metrics
-    lifetime_value = Column(DECIMAL(10, 2), nullable=True)
-    total_orders = Column(Integer, default=0, nullable=False)
-    avg_order_value = Column(DECIMAL(10, 2), nullable=True)
+    lifetime_value: Mapped[Optional[float]] = mapped_column(DECIMAL(10, 2), nullable=True)
+    total_orders: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    avg_order_value: Mapped[Optional[float]] = mapped_column(DECIMAL(10, 2), nullable=True)
 
     # Satisfaction metrics
-    avg_rating_given = Column(DECIMAL(3, 2), nullable=True)  # Average rating they give
-    total_reviews = Column(Integer, default=0, nullable=False)
-    positive_reviews = Column(Integer, default=0, nullable=False)
-    negative_reviews = Column(Integer, default=0, nullable=False)
+    avg_rating_given: Mapped[Optional[float]] = mapped_column(DECIMAL(3, 2), nullable=True)  # Average rating they give
+    total_reviews: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    positive_reviews: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    negative_reviews: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # Communication preferences
-    preferred_contact_method = Column(String(50), nullable=True)  # email, phone, sms
-    timezone = Column(String(50), nullable=True)
-    language = Column(String(10), default="en", nullable=False)
+    preferred_contact_method: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # email, phone, sms
+    timezone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    language: Mapped[str] = mapped_column(String(10), default="en", nullable=False)
 
     # Status tracking
-    status = Column(
+    status: Mapped[str] = mapped_column(
         String(50), default="active", nullable=False, index=True
     )  # active, churned, recovered
 
     # Timestamps
-    created_at = Column(
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    updated_at = Column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
@@ -78,21 +73,20 @@ class Customer(Base):
     )
 
     # Relationships
-    organization = relationship("Organization", back_populates="customers")
     reviews = relationship("Review", back_populates="customer")
     support_tickets = relationship("SupportTicket", back_populates="customer")
     recovery_actions = relationship("RecoveryAction", back_populates="customer")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<Customer(id={self.id}, name='{self.name}', email='{self.email}')>"
 
     @property
     def display_name(self) -> str:
         """Get display name for customer"""
         if self.name:
-            return self.name
+            return str(self.name)
         elif self.email:
-            return self.email.split("@")[0]
+            return str(self.email).split("@")[0]
         elif self.phone:
             return f"Customer {self.phone}"
         else:
@@ -104,7 +98,7 @@ class Customer(Base):
         if self.churn_risk_score is None:
             return "Unknown"
 
-        score = float(self.churn_risk_score)
+        score = float(cast(Any, self.churn_risk_score))
         if score >= 0.8:
             return "Critical"
         elif score >= 0.6:
@@ -122,7 +116,7 @@ class Customer(Base):
         if self.bad_review_likelihood is None:
             return "Unknown"
 
-        score = float(self.bad_review_likelihood)
+        score = float(cast(Any, self.bad_review_likelihood))
         if score >= 0.8:
             return "Very High"
         elif score >= 0.6:
@@ -140,60 +134,64 @@ class Customer(Base):
         if self.total_reviews == 0:
             return None
 
-        return self.positive_reviews / self.total_reviews
+        return float(cast(Any, self.positive_reviews)) / float(cast(Any, self.total_reviews))
 
     @property
     def days_since_last_interaction(self) -> Optional[int]:
         """Get days since last interaction"""
-        if not self.last_interaction:
+        if self.last_interaction is None:
             return None
 
-        delta = datetime.now(timezone.utc) - self.last_interaction
+        last_int = cast(datetime, cast(Any, self.last_interaction))
+        delta = datetime.now(timezone.utc) - last_int
         return delta.days
 
     @property
     def is_at_risk(self) -> bool:
         """Check if customer is at risk"""
-        return self.churn_risk_score and float(self.churn_risk_score) >= 0.6
+        return (
+            self.churn_risk_score is not None
+            and float(cast(Any, self.churn_risk_score)) >= 0.6
+        )
 
     @property
     def is_high_value(self) -> bool:
         """Check if customer is high value"""
         return (
-            self.lifetime_value
-            and float(self.lifetime_value) >= 1000  # Configurable threshold
+            self.lifetime_value is not None
+            and float(cast(Any, self.lifetime_value)) >= 1000  # Configurable threshold
         )
 
-    def update_interaction(self):
+    def update_interaction(self) -> None:
         """Update last interaction timestamp and count"""
         self.last_interaction = datetime.now(timezone.utc)
         self.interaction_count += 1
 
-    def update_risk_scores(self, churn_risk: float, review_risk: float):
+    def update_risk_scores(self, churn_risk: float, review_risk: float) -> None:
         """Update risk scores"""
         self.churn_risk_score = min(max(churn_risk, 0.0), 1.0)  # Clamp to 0-1
         self.bad_review_likelihood = min(max(review_risk, 0.0), 1.0)
 
-    def add_review_stats(self, rating: int):
+    def add_review_stats(self, rating: int) -> None:
         """Update review statistics"""
-        self.total_reviews += 1
+        total_revs = int(cast(Any, self.total_reviews or 0)) + 1
+        self.total_reviews = total_revs
 
         if rating >= 4:
-            self.positive_reviews += 1
+            self.positive_reviews = int(cast(Any, self.positive_reviews or 0)) + 1
         elif rating <= 2:
-            self.negative_reviews += 1
+            self.negative_reviews = int(cast(Any, self.negative_reviews or 0)) + 1
 
         # Update average rating
-        if self.avg_rating_given is None:
-            self.avg_rating_given = rating
+        current_avg = cast(Any, self.avg_rating_given)
+        if current_avg is None:
+            setattr(self, "avg_rating_given", float(rating))
         else:
             # Calculate new average
-            total_rating = (
-                float(self.avg_rating_given) * (self.total_reviews - 1) + rating
-            )
-            self.avg_rating_given = total_rating / self.total_reviews
+            total_rating = float(current_avg) * (total_revs - 1) + float(rating)
+            setattr(self, "avg_rating_given", float(total_rating / total_revs))
 
-    def add_tag(self, tag: str):
+    def add_tag(self, tag: str) -> None:
         """Add tag to customer"""
         if not self.tags:
             self.tags = tag
@@ -203,7 +201,7 @@ class Customer(Base):
                 tags.append(tag)
                 self.tags = ",".join(tags)
 
-    def remove_tag(self, tag: str):
+    def remove_tag(self, tag: str) -> None:
         """Remove tag from customer"""
         if self.tags:
             tags = [t.strip() for t in self.tags.split(",")]
@@ -217,27 +215,27 @@ class Customer(Base):
             return []
         return [tag.strip() for tag in self.tags.split(",")]
 
-    def update_context_summary(self, summary: str):
+    def update_context_summary(self, summary: str) -> None:
         """Update AI-generated context summary"""
         self.context_summary = summary
         self.updated_at = datetime.now(timezone.utc)
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
         return {
             "id": str(self.id),
-            "organization_id": str(self.organization_id),
+            "organization_id": str(self.organization_id) if self.organization_id else None,
             "email": self.email,
             "phone": self.phone,
             "name": self.name,
             "display_name": self.display_name,
             "external_id": self.external_id,
             "churn_risk_score": (
-                float(self.churn_risk_score) if self.churn_risk_score else None
+                float(cast(Any, self.churn_risk_score)) if self.churn_risk_score is not None else None
             ),
             "bad_review_likelihood": (
-                float(self.bad_review_likelihood)
-                if self.bad_review_likelihood
+                float(cast(Any, self.bad_review_likelihood))
+                if self.bad_review_likelihood is not None
                 else None
             ),
             "risk_level": self.risk_level,
@@ -249,14 +247,14 @@ class Customer(Base):
             "context_summary": self.context_summary,
             "tags": self.get_tags(),
             "lifetime_value": (
-                float(self.lifetime_value) if self.lifetime_value else None
+                float(cast(Any, self.lifetime_value)) if self.lifetime_value is not None else None
             ),
             "total_orders": self.total_orders,
             "avg_order_value": (
-                float(self.avg_order_value) if self.avg_order_value else None
+                float(cast(Any, self.avg_order_value)) if self.avg_order_value is not None else None
             ),
             "avg_rating_given": (
-                float(self.avg_rating_given) if self.avg_rating_given else None
+                float(cast(Any, self.avg_rating_given)) if self.avg_rating_given is not None else None
             ),
             "total_reviews": self.total_reviews,
             "positive_reviews": self.positive_reviews,

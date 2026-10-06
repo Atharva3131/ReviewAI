@@ -2,13 +2,13 @@
 
 import enum
 import uuid
-from typing import List, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, cast
 
 from sqlalchemy import (
     ARRAY,
     DECIMAL,
     Boolean,
-    Column,
     DateTime,
     Enum,
     ForeignKey,
@@ -17,7 +17,7 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.core.database import Base
@@ -69,23 +69,18 @@ class Review(Base):
 
     __tablename__ = "reviews"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    organization_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    organization_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
 
     # Review source information
-    platform = Column(Enum(ReviewPlatform), nullable=False, index=True)
-    external_id = Column(String(255), nullable=True, index=True)  # Platform-specific ID
-    review_url = Column(Text, nullable=True)
+    platform: Mapped[ReviewPlatform] = mapped_column(Enum(ReviewPlatform), nullable=False, index=True)
+    external_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)  # Platform-specific ID
+    review_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Customer information
-    customer_name = Column(String(255), nullable=True)
-    customer_email = Column(String(255), nullable=True)
-    customer_id = Column(
+    customer_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    customer_email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    customer_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("customers.id", ondelete="SET NULL"),
         nullable=True,
@@ -93,41 +88,41 @@ class Review(Base):
     )
 
     # Review content
-    rating = Column(Integer, nullable=False, index=True)  # 1-5 stars
-    title = Column(String(500), nullable=True)
-    content = Column(Text, nullable=True)
+    rating: Mapped[int] = mapped_column(Integer, nullable=False, index=True)  # 1-5 stars
+    title: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # AI Analysis results
-    sentiment_score = Column(DECIMAL(3, 2), nullable=True, index=True)  # 0.00 to 1.00
-    urgency_level = Column(Enum(UrgencyLevel), nullable=True, index=True)
-    issue_categories = Column(ARRAY(Enum(IssueCategory)), nullable=True)
+    sentiment_score: Mapped[Optional[float]] = mapped_column(DECIMAL(3, 2), nullable=True, index=True)  # 0.00 to 1.00
+    urgency_level: Mapped[Optional[UrgencyLevel]] = mapped_column(Enum(UrgencyLevel), nullable=True, index=True)
+    issue_categories: Mapped[Optional[List[IssueCategory]]] = mapped_column(ARRAY(Enum(IssueCategory)), nullable=True)
 
     # Processing status
-    status = Column(
+    status: Mapped[ReviewStatus] = mapped_column(
         Enum(ReviewStatus), default=ReviewStatus.PENDING, nullable=False, index=True
     )
-    requires_private_recovery = Column(
+    requires_private_recovery: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False, index=True
     )
 
     # Response information
-    public_response = Column(Text, nullable=True)
-    public_response_date = Column(DateTime(timezone=True), nullable=True)
-    internal_notes = Column(Text, nullable=True)
+    public_response: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    public_response_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    internal_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Metadata
-    review_date = Column(
+    review_date: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )  # When review was posted
-    processed_at = Column(
+    processed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )  # When AI processed it
 
     # Timestamps
-    created_at = Column(
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    updated_at = Column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
@@ -135,7 +130,6 @@ class Review(Base):
     )
 
     # Relationships
-    organization = relationship("Organization", back_populates="reviews")
     customer = relationship("Customer", back_populates="reviews")
     recovery_actions = relationship("RecoveryAction", back_populates="review")
     # Note: agent_decisions relationship removed - use input_id query instead (polymorphic relationship)
@@ -148,22 +142,22 @@ class Review(Base):
     @property
     def is_positive(self) -> bool:
         """Check if review is positive (4-5 stars)"""
-        return self.rating >= 4
+        return bool(self.rating >= 4)
 
     @property
     def is_negative(self) -> bool:
         """Check if review is negative (1-2 stars)"""
-        return self.rating <= 2
+        return bool(self.rating <= 2)
 
     @property
     def is_neutral(self) -> bool:
         """Check if review is neutral (3 stars)"""
-        return self.rating == 3
+        return bool(self.rating == 3)
 
     @property
     def is_critical(self) -> bool:
         """Check if review is critical (needs immediate attention)"""
-        return self.rating <= 2 and self.urgency_level == UrgencyLevel.HIGH
+        return bool(self.rating <= 2 and self.urgency_level == UrgencyLevel.HIGH)
 
     @property
     def sentiment_label(self) -> str:
@@ -171,7 +165,7 @@ class Review(Base):
         if self.sentiment_score is None:
             return "Unknown"
 
-        score = float(self.sentiment_score)
+        score = float(cast(Any, self.sentiment_score))
         if score >= 0.7:
             return "Very Positive"
         elif score >= 0.5:
@@ -194,24 +188,24 @@ class Review(Base):
         delta = datetime.now(timezone.utc) - self.review_date
         return delta.days
 
-    def add_issue_category(self, category: IssueCategory):
+    def add_issue_category(self, category: IssueCategory) -> None:
         """Add issue category to review"""
         if self.issue_categories is None:
-            self.issue_categories = []
+            setattr(self, "issue_categories", [])
 
-        if category not in self.issue_categories:
-            self.issue_categories.append(category)
+        if category not in (self.issue_categories or []):
+            cast(List[IssueCategory], self.issue_categories).append(category)
 
-    def remove_issue_category(self, category: IssueCategory):
+    def remove_issue_category(self, category: IssueCategory) -> None:
         """Remove issue category from review"""
         if self.issue_categories and category in self.issue_categories:
             self.issue_categories.remove(category)
 
     def has_issue_category(self, category: IssueCategory) -> bool:
         """Check if review has specific issue category"""
-        return self.issue_categories and category in self.issue_categories
+        return bool(self.issue_categories and category in self.issue_categories)
 
-    def set_public_response(self, response: str):
+    def set_public_response(self, response: str) -> None:
         """Set public response and update status"""
         self.public_response = response
         from datetime import datetime, timezone
@@ -219,7 +213,7 @@ class Review(Base):
         self.public_response_date = datetime.now(timezone.utc)
         self.status = ReviewStatus.RESPONDED
 
-    def escalate(self, reason: str = None):
+    def escalate(self, reason: Optional[str] = None) -> None:
         """Escalate review for human attention"""
         self.status = ReviewStatus.ESCALATED
         if reason:
@@ -228,7 +222,7 @@ class Review(Base):
             else:
                 self.internal_notes = f"Escalated: {reason}"
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
         return {
             "id": str(self.id),
@@ -243,7 +237,7 @@ class Review(Base):
             "title": self.title,
             "content": self.content,
             "sentiment_score": (
-                float(self.sentiment_score) if self.sentiment_score else None
+                float(cast(Any, self.sentiment_score)) if self.sentiment_score is not None else None
             ),
             "sentiment_label": self.sentiment_label,
             "urgency_level": self.urgency_level.value if self.urgency_level else None,

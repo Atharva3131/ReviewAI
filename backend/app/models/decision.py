@@ -76,6 +76,10 @@ class StructuredDecisionOutput(BaseModel):
     )
 
     # Model metadata
+    decision_provider: str = Field(
+        default="mock",
+        description="Decision provider (mock, laya, jev, llm)",
+    )
     model_version: Optional[str] = Field(
         None, description="Version of the model that produced this decision"
     )

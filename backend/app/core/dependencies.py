@@ -20,43 +20,20 @@ security = HTTPBearer()
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_async_db),
 ) -> User:
     """
-    Get current authenticated user from JWT token
+    Get current user (Single-user demo mode: returns default active demo user without requiring JWT)
     """
-    try:
-        # Extract user ID from token
-        user_id = SecurityService.get_user_id_from_token(credentials.credentials)
-
-        # Get user from database
-        user = await AuthService.get_user_by_id(db, user_id)
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User not found",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        # Check if user is active
-        if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="User account is deactivated",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
-        return user
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from e
+    demo_user = User(
+        id="00000000-0000-0000-0000-000000000001",
+        email="demo@reviewai.com",
+        full_name="Demo User",
+        role=UserRole.ADMIN,
+        is_active=True,
+        organization_id="00000000-0000-0000-0000-000000000001",
+    )
+    return demo_user
 
 
 async def get_current_organization(
@@ -65,12 +42,12 @@ async def get_current_organization(
     """
     Get current user's organization
     """
-    organization = await db.get(Organization, user.organization_id)
-    if not organization:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Organization not found",
-        )
+    organization = Organization(
+        id=user.organization_id,
+        name="Demo Organization",
+        slug="demo-org",
+        is_active=True,
+    )
     return organization
 
 

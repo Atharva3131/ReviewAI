@@ -18,6 +18,8 @@ class LLMProvider(str, Enum):
 
     OPENAI = "openai"
     GEMINI = "gemini"
+    MISTRAL = "mistral"
+    BEDROCK = "bedrock"
     MOCK = "mock"  # For testing
 
 
@@ -32,6 +34,9 @@ class LLMModel(str, Enum):
     # Gemini models
     GEMINI_PRO = "gemini-pro"
     GEMINI_PRO_VISION = "gemini-pro-vision"
+
+    # Bedrock models
+    BEDROCK_CLAUDE = "anthropic.claude-3-sonnet-20240229-v1:0"
 
     # Mock model
     MOCK_MODEL = "mock-model"

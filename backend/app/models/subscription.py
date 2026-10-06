@@ -2,10 +2,11 @@
 
 import enum
 import uuid
+from datetime import datetime
+from typing import Any, Dict, Optional
 
 from sqlalchemy import (
     Boolean,
-    Column,
     DateTime,
     Enum,
     ForeignKey,
@@ -15,7 +16,7 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.dialects.postgresql import JSON, UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.core.database import Base
@@ -53,21 +54,21 @@ class SubscriptionPlan(Base):
 
     __tablename__ = "subscription_plans"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    name = Column(String(100), nullable=False)
-    description = Column(Text, nullable=True)
-    price_monthly = Column(Numeric(10, 2), nullable=False)
-    price_yearly = Column(Numeric(10, 2), nullable=False)
-    features = Column(JSON, default=dict, nullable=False)
-    limits = Column(JSON, default=dict, nullable=False)
-    stripe_price_id_monthly = Column(String(255), nullable=True)
-    stripe_price_id_yearly = Column(String(255), nullable=True)
-    is_active = Column(Boolean, default=True, nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    price_monthly: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    price_yearly: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    features: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    limits: Mapped[Dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    stripe_price_id_monthly: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    stripe_price_id_yearly: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    created_at = Column(
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    updated_at = Column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
@@ -100,46 +101,46 @@ class Subscription(Base):
 
     __tablename__ = "subscriptions"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    organization_id = Column(
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    plan_id = Column(
+    plan_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("subscription_plans.id", ondelete="RESTRICT"),
         nullable=False,
     )
-    status = Column(
+    status: Mapped[SubscriptionStatus] = mapped_column(
         Enum(SubscriptionStatus),
         default=SubscriptionStatus.ACTIVE,
         nullable=False,
         index=True,
     )
-    billing_period = Column(
+    billing_period: Mapped[BillingPeriod] = mapped_column(
         Enum(BillingPeriod), default=BillingPeriod.MONTHLY, nullable=False
     )
 
     # Stripe integration
-    stripe_subscription_id = Column(String(255), nullable=True)
-    stripe_customer_id = Column(String(255), nullable=True)
+    stripe_subscription_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    stripe_customer_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # Billing cycle
-    current_period_start = Column(DateTime(timezone=True), nullable=True)
-    current_period_end = Column(DateTime(timezone=True), nullable=True)
-    cancel_at_period_end = Column(Boolean, default=False, nullable=False)
-    canceled_at = Column(DateTime(timezone=True), nullable=True)
+    current_period_start: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    current_period_end: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    canceled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Trial period
-    trial_start = Column(DateTime(timezone=True), nullable=True)
-    trial_end = Column(DateTime(timezone=True), nullable=True)
+    trial_start: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    trial_end: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    created_at = Column(
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    updated_at = Column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
@@ -202,33 +203,33 @@ class Invoice(Base):
 
     __tablename__ = "invoices"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    organization_id = Column(
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    subscription_id = Column(
+    subscription_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("subscriptions.id", ondelete="CASCADE"),
         nullable=False,
     )
-    stripe_invoice_id = Column(String(255), nullable=True)
-    amount = Column(Numeric(10, 2), nullable=False)
-    currency = Column(String(3), default="usd", nullable=False)
-    status = Column(
+    stripe_invoice_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), default="usd", nullable=False)
+    status: Mapped[InvoiceStatus] = mapped_column(
         Enum(InvoiceStatus), default=InvoiceStatus.DRAFT, nullable=False, index=True
     )
-    invoice_number = Column(String(100), nullable=True)
-    invoice_pdf = Column(String(500), nullable=True)
-    due_date = Column(DateTime(timezone=True), nullable=True)
-    paid_at = Column(DateTime(timezone=True), nullable=True)
+    invoice_number: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    invoice_pdf: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    due_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    created_at = Column(
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    updated_at = Column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
@@ -271,24 +272,24 @@ class UsageRecord(Base):
 
     __tablename__ = "usage_records"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
-    organization_id = Column(
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    subscription_id = Column(
+    subscription_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("subscriptions.id", ondelete="CASCADE"),
         nullable=False,
     )
-    metric_name = Column(String(100), nullable=False)
-    quantity = Column(Integer, default=0, nullable=False)
-    period_start = Column(DateTime(timezone=True), nullable=False, index=True)
-    period_end = Column(DateTime(timezone=True), nullable=False, index=True)
+    metric_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
 
-    created_at = Column(
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 

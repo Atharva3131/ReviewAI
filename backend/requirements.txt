@@ -43,6 +43,8 @@ cryptography==44.0.0
 # Utilities
 python-dotenv==1.0.1
 email-validator==2.2.0
+psutil==7.2.2
+boto3==1.43.108
 
 # Payment processing
 stripe==11.3.0

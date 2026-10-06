@@ -91,6 +91,7 @@ class MockDecisionModel(DecisionModel):
             safety_concern=safety_concern,
             confidence=confidence,
             category_confidence=confidence - 0.1,
+            decision_provider="mock",
             model_version=self.model_version,
             model_name=self.model_name,
         )

@@ -13,6 +13,7 @@ from app.api.v1.endpoints import (
     auth,
     customers,
     dashboard,
+    demo,
     reviews,
     users,
     webhooks,
@@ -50,6 +51,7 @@ app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["dashboar
 app.include_router(users.router, prefix="/api/v1/users", tags=["users"])
 app.include_router(agents.router, prefix="/api/v1/agents", tags=["agents"])
 app.include_router(webhooks.router, prefix="/api/v1/webhooks", tags=["webhooks"])
+app.include_router(demo.router, prefix="/api/v1/demo", tags=["demo"])
 
 
 @app.get("/health")

@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     # Rate Limiting
     RATE_LIMIT_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
 
+    # Decision Model
+    DECISION_MODEL_PROVIDER: str = os.getenv("DECISION_MODEL_PROVIDER", "mock")
+    LAYA_MODEL_PATH: Optional[str] = os.getenv("LAYA_MODEL_PATH")
+
     # Database
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL", "postgresql://user:password@localhost:5432/revive_ai"

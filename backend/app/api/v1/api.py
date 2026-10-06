@@ -10,6 +10,7 @@ from app.api.v1.endpoints import (
     billing,
     customers,
     dashboard,
+    demo,
     health,
     privacy,
     reviews,
@@ -37,4 +38,5 @@ api_router.include_router(
 api_router.include_router(
     support_tickets.router, prefix="/support-tickets", tags=["support", "tickets"]
 )
+api_router.include_router(demo.router, prefix="/demo", tags=["demo"])
 api_router.include_router(health.router, tags=["health"])

@@ -47,6 +47,11 @@ email-validator==2.2.0
 # Payment processing
 stripe==11.3.0
 
+# ML & Decision Models
+scikit-learn==1.6.1
+xgboost==2.1.1
+lightgbm==4.5.0
+
 # Core Python packages
 greenlet==3.3.2
 

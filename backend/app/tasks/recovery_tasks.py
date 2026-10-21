@@ -10,7 +10,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from celery import current_task
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.celery import celery_app
 from app.core.database import get_async_db_context
@@ -294,9 +296,6 @@ def check_action_effectiveness(self, action_id: str) -> Dict[str, Any]:
 async def _check_action_effectiveness_async(action_id: str) -> Dict[str, Any]:
     """Check action effectiveness asynchronously"""
     async with get_async_db_context() as db:
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
-
         # Get action with customer data
         result = await db.execute(
             select(RecoveryAction)
@@ -415,8 +414,6 @@ def cleanup_expired_actions(self) -> Dict[str, Any]:
 async def _cleanup_expired_actions_async() -> Dict[str, Any]:
     """Clean up expired actions asynchronously"""
     async with get_async_db_context() as db:
-        from sqlalchemy import select, update
-
         now = datetime.now(timezone.utc)
 
         # Find expired actions

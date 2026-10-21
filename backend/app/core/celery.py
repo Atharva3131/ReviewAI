@@ -178,6 +178,7 @@ def revoke_task(task_id: str, terminate: bool = False) -> None:
 
 
 # Task scheduling utilities
+# pyrefly: ignore [unannotated-return]
 def schedule_periodic_tasks():
     """Schedule periodic tasks using Celery Beat"""
     from celery.schedules import crontab

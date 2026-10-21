@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 import numpy as np
-from pgvector.sqlalchemy import Vector
+from pgvector.sqlalchemy import Vector  # type: ignore[import-untyped]
 from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -111,7 +111,7 @@ class Embedding(Base):
         from datetime import timedelta
 
         threshold = datetime.now(timezone.utc) - timedelta(days=30)
-        return bool(self.created_at < threshold)
+        return self.created_at < threshold
 
     def update_usage(self) -> None:
         """Update usage statistics"""
@@ -149,9 +149,9 @@ class Embedding(Base):
             "content_type": self.content_type.value,
             "content_id": str(self.content_id),
             "content_text": (
-                str(self.content_text)[:200] + "..."
-                if len(str(self.content_text)) > 200
-                else str(self.content_text)
+                self.content_text[:200] + "..."
+                if len(self.content_text) > 200
+                else self.content_text
             ),
             "content_hash": self.content_hash,
             "model_name": self.model_name.value,

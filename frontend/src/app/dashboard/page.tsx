@@ -17,8 +17,10 @@ import {
   AlertTriangle,
   CheckCircle,
   RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SimulateReviewModal } from '@/components/dashboard/simulate-review-modal';
 
 interface DashboardMetrics {
   average_rating: number;
@@ -50,6 +52,7 @@ interface ActionItem {
 }
 
 export default function DashboardPage() {
+  const [simulateModalOpen, setSimulateModalOpen] = useState(false);
   const {
     data: metrics,
     isLoading: metricsLoading,
@@ -200,6 +203,14 @@ export default function DashboardPage() {
             </span>
           )}
           <Button
+            size='sm'
+            onClick={() => setSimulateModalOpen(true)}
+            className='bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm'
+          >
+            <Sparkles className='h-4 w-4 mr-2 text-yellow-300' />
+            Simulate Google Review
+          </Button>
+          <Button
             variant='outline'
             size='sm'
             onClick={handleRefreshAll}
@@ -212,6 +223,12 @@ export default function DashboardPage() {
           </Button>
         </div>
       </div>
+
+      <SimulateReviewModal
+        isOpen={simulateModalOpen}
+        onClose={() => setSimulateModalOpen(false)}
+        onSuccess={handleRefreshAll}
+      />
 
       {hasError && (
         <div className='mb-6 bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded-md'>

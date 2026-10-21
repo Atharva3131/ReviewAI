@@ -10,6 +10,10 @@ export interface Review {
   issue_categories: string[];
   status: 'pending' | 'responded' | 'escalated';
   requires_private_recovery: boolean;
+  decision_provider?: string;
+  churn_risk_score?: number;
+  policy_strategy?: string;
+  structured_decision?: Record<string, any>;
   created_at: string;
   updated_at: string;
   response?: ReviewResponse;

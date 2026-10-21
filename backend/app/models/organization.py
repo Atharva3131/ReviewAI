@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from sqlalchemy import JSON, DateTime, String, Text
 from sqlalchemy.dialects.postgresql import UUID
@@ -34,22 +34,22 @@ class Organization(Base):
     )
 
     # Relationships
-    users = relationship(
+    users: Mapped[List[Any]] = relationship(
         "User", back_populates="organization", cascade="all, delete-orphan"
     )
-    reviews = relationship(
+    reviews: Mapped[List[Any]] = relationship(
         "Review", back_populates="organization", cascade="all, delete-orphan"
     )
-    customers = relationship(
+    customers: Mapped[List[Any]] = relationship(
         "Customer", back_populates="organization", cascade="all, delete-orphan"
     )
-    support_tickets = relationship(
+    support_tickets: Mapped[List[Any]] = relationship(
         "SupportTicket", back_populates="organization", cascade="all, delete-orphan"
     )
-    recovery_actions = relationship(
+    recovery_actions: Mapped[List[Any]] = relationship(
         "RecoveryAction", back_populates="organization", cascade="all, delete-orphan"
     )
-    agent_decisions = relationship(
+    agent_decisions: Mapped[List[Any]] = relationship(
         "AgentDecision", back_populates="organization", cascade="all, delete-orphan"
     )
     # embeddings = relationship("Embedding", back_populates="organization", cascade="all, delete-orphan")  # Requires pgvector
@@ -58,24 +58,26 @@ class Organization(Base):
         return f"<Organization(id={self.id}, name='{self.name}')>"
 
     @property
-    def user_count(self):
+    def user_count(self) -> int:
         """Get number of users in organization"""
-        return len(self.users)
+        return len(cast(Any, self.users)) if self.users else 0
 
     @property
-    def review_count(self):
+    def review_count(self) -> int:
         """Get number of reviews for organization"""
-        return len(self.reviews)
+        return len(cast(Any, self.reviews)) if self.reviews else 0
 
-    def get_setting(self, key: str, default=None):
+    def get_setting(self, key: str, default: Any = None) -> Any:
         """Get organization setting by key"""
+        if not self.settings:
+            return default
         return self.settings.get(key, default)
 
-    def set_setting(self, key: str, value):
+    def set_setting(self, key: str, value: Any) -> None:
         """Set organization setting"""
-        if self.settings is None:
-            self.settings = {}
-        self.settings[key] = value
+        current_settings = dict(self.settings or {})
+        current_settings[key] = value
+        self.settings = current_settings
 
     def to_dict(self):
         """Convert to dictionary"""

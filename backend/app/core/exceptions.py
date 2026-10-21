@@ -2,7 +2,7 @@
 Custom exception classes for Revive AI
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Type
 
 from fastapi import HTTPException, status
 
@@ -193,7 +193,7 @@ class ServiceUnavailableHTTPException(HTTPException):
 
 
 # Exception mapping for converting custom exceptions to HTTP exceptions
-EXCEPTION_MAPPING = {
+EXCEPTION_MAPPING: Dict[Type[ReviveAIException], Callable[..., HTTPException]] = {
     ResourceNotFoundError: NotFoundHTTPException,
     ResourceExistsError: ConflictHTTPException,
     ValidationError: UnprocessableEntityHTTPException,

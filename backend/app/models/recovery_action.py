@@ -179,19 +179,19 @@ class RecoveryAction(Base):
         """Check if action is expired"""
         if not self.expires_at:
             return False
-        return bool(datetime.now(timezone.utc) > self.expires_at)
+        return datetime.now(timezone.utc) > self.expires_at
 
     @property
     def is_overdue(self) -> bool:
         """Check if scheduled action is overdue"""
         if not self.scheduled_at or not self.is_pending:
             return False
-        return bool(datetime.now(timezone.utc) > self.scheduled_at)
+        return datetime.now(timezone.utc) > self.scheduled_at
 
     @property
     def can_retry(self) -> bool:
         """Check if action can be retried"""
-        return bool(
+        return (
             self.status == ActionStatus.FAILED
             and self.attempts < self.max_attempts
             and not self.is_expired
@@ -276,11 +276,11 @@ class RecoveryAction(Base):
             return default
         return self.action_metadata.get(key, default)
 
-    def set_metadata_value(self, key: str, value: Any):
+    def set_metadata_value(self, key: str, value: Any) -> None:
         """Set value in metadata"""
-        if not self.action_metadata:
-            self.action_metadata = {}
-        self.action_metadata[key] = value
+        current_metadata = dict(self.action_metadata or {})
+        current_metadata[key] = value
+        self.action_metadata = current_metadata
 
     def get_discount_percentage(self) -> Optional[float]:
         """Get discount percentage for discount offers"""

@@ -29,93 +29,34 @@ interface AuthProviderProps {
   children: React.ReactNode;
 }
 
-const publicRoutes = ['/login', '/register', '/reset-password'];
+// DEMO MODE: single-user portfolio demo — no authentication required
+const DEMO_USER: User = {
+  id: 'demo-user',
+  email: 'demo@reviewai.demo',
+  organization_id: 'demo-org',
+  organization_name: 'Demo Organisation',
+  role: 'admin',
+};
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [needsOrganizationSelection, setNeedsOrganizationSelection] = useState(false);
+  // Always authenticated in demo mode — no login/JWT required
+  const [user] = useState<User | null>(DEMO_USER);
+  const [isLoading] = useState(false);
+  const [needsOrganizationSelection] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        // Check if user is stored locally
-        const storedUser = AuthService.getStoredUser();
-        const token = AuthService.getToken();
-
-        if (storedUser && token) {
-          // Verify token is still valid
-          const currentUser = await AuthService.getCurrentUser();
-          if (currentUser) {
-            setUser(currentUser);
-
-            // Check if user needs to select organization
-            if (
-              !currentUser.organization_id &&
-              currentUser.organizations &&
-              currentUser.organizations.length > 1
-            ) {
-              setNeedsOrganizationSelection(true);
-            }
-          } else {
-            // Token is invalid, clear storage
-            AuthService.logout();
-          }
-        }
-      } catch (error) {
-        console.error('Auth initialization error:', error);
-        AuthService.logout();
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    initAuth();
-  }, []);
-
-  useEffect(() => {
-    if (!isLoading && !needsOrganizationSelection) {
-      const isPublicRoute = publicRoutes.includes(pathname);
-      const isAuthenticated = !!user;
-
-      if (!isAuthenticated && !isPublicRoute) {
-        router.push('/login');
-      } else if (isAuthenticated && isPublicRoute) {
-        router.push('/dashboard');
-      }
-    }
-  }, [user, isLoading, needsOrganizationSelection, pathname, router]);
-
-  const login = async (email: string, password: string) => {
-    const authData = await AuthService.login({ email, password });
-    setUser(authData.user);
-
-    // Check if user needs to select organization
-    if (
-      !authData.user.organization_id &&
-      authData.user.organizations &&
-      authData.user.organizations.length > 1
-    ) {
-      setNeedsOrganizationSelection(true);
-    }
+  const login = async (_email: string, _password: string) => {
+    // No-op in demo mode
   };
 
   const logout = async () => {
-    await AuthService.logout();
-    setUser(null);
-    setNeedsOrganizationSelection(false);
-    router.push('/login');
+    // No-op in demo mode — redirect to dashboard
+    router.push('/dashboard');
   };
 
-  const selectOrganization = (organizationId: string) => {
-    if (user) {
-      const updatedUser = { ...user, organization_id: organizationId };
-      setUser(updatedUser);
-      localStorage.setItem('user_data', JSON.stringify(updatedUser));
-      setNeedsOrganizationSelection(false);
-    }
+  const selectOrganization = (_organizationId: string) => {
+    // No-op in demo mode
   };
 
   const value: AuthContextType = {
@@ -123,19 +64,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isLoading,
     login,
     logout,
-    isAuthenticated: !!user,
+    isAuthenticated: true, // always authenticated in demo mode
     needsOrganizationSelection,
     selectOrganization,
   };
-
-  // Show organization selector if needed
-  if (needsOrganizationSelection && user) {
-    return (
-      <AuthContext.Provider value={value}>
-        <OrganizationSelector user={user} onSelect={selectOrganization} />
-      </AuthContext.Provider>
-    );
-  }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -37,7 +37,7 @@ def test_runtime():
         print("Demo error:", res_demo.text)
     assert res_demo.status_code == 200
 
-    print("\n✓ ALL RUNTIME ENDPOINT TESTS PASSED!")
+    print("\n[OK] ALL RUNTIME ENDPOINT TESTS PASSED!")
 
 if __name__ == "__main__":
     test_runtime()

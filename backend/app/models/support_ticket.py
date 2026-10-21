@@ -163,8 +163,7 @@ class SupportTicket(Base):
             TicketPriority.LOW: 72,
         }
 
-        priority_val = cast(TicketPriority, self.priority)
-        return bool(hours_open > sla_hours.get(priority_val, 24))
+        return hours_open > sla_hours.get(self.priority, 24)
 
     @property
     def hours_open(self) -> float:

@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from passlib.context import CryptContext
+from passlib.context import CryptContext  # type: ignore[import-untyped]
 from sqlalchemy import (
     JSON,
     Boolean,

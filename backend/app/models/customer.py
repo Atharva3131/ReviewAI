@@ -84,9 +84,9 @@ class Customer(Base):
     def display_name(self) -> str:
         """Get display name for customer"""
         if self.name:
-            return str(self.name)
+            return self.name
         elif self.email:
-            return str(self.email).split("@")[0]
+            return self.email.split("@")[0]
         elif self.phone:
             return f"Customer {self.phone}"
         else:

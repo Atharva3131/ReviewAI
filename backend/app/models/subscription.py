@@ -3,7 +3,7 @@
 import enum
 import uuid
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 from sqlalchemy import (
     Boolean,
@@ -86,8 +86,8 @@ class SubscriptionPlan(Base):
             "id": str(self.id),
             "name": self.name,
             "description": self.description,
-            "price_monthly": float(self.price_monthly),
-            "price_yearly": float(self.price_yearly),
+            "price_monthly": float(cast(Any, self.price_monthly)),
+            "price_yearly": float(cast(Any, self.price_yearly)),
             "features": self.features,
             "limits": self.limits,
             "is_active": self.is_active,
@@ -254,7 +254,7 @@ class Invoice(Base):
             "organization_id": str(self.organization_id),
             "subscription_id": str(self.subscription_id),
             "stripe_invoice_id": self.stripe_invoice_id,
-            "amount": float(self.amount),
+            "amount": float(cast(Any, self.amount)),
             "currency": self.currency,
             "status": self.status.value,
             "invoice_number": self.invoice_number,

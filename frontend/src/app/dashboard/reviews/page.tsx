@@ -651,6 +651,21 @@ export default function ReviewsPage() {
                       <span className='font-medium text-gray-900'>{review.customer_name}</span>
                     </div>
                     <p className='text-sm text-gray-600 line-clamp-2'>{review.content}</p>
+                    <div className='flex flex-wrap items-center gap-2 mt-2'>
+                      <span className='inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200'>
+                        Provider: {review.decision_provider || 'mock'}
+                      </span>
+                      {review.policy_strategy && (
+                        <span className='inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200'>
+                          Strategy: {review.policy_strategy}
+                        </span>
+                      )}
+                      {review.churn_risk_score !== undefined && (
+                        <span className='inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200'>
+                          Risk: {Math.round(review.churn_risk_score * 100)}%
+                        </span>
+                      )}
+                    </div>
                     <p className='text-xs text-gray-500 mt-1'>
                       {formatDateTime(review.created_at)}
                     </p>

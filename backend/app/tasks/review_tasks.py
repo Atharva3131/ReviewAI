@@ -6,10 +6,11 @@ sentiment analysis, urgency classification, and automated response generation.
 """
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from celery import current_task
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.celery import celery_app
@@ -170,30 +171,33 @@ async def _analyze_review(review: Review, db: AsyncSession) -> Dict[str, Any]:
     categorization_service = CategorizationService()
 
     # Perform analysis
-    sentiment_score = sentiment_service.analyze_sentiment(review.content)
-    urgency_result = urgency_service.classify_urgency(review.content, review.rating)
-    categories = categorization_service.categorize_review(review.content)
+    content = review.content or ""
+    sentiment_result = await sentiment_service.analyze_sentiment(content, review.rating)
+    urgency_result = await urgency_service.classify_urgency(content, review.rating)
+    categories_result = await categorization_service.categorize_issues(content, rating=review.rating)
+
+    sentiment_score = sentiment_result.get("sentiment_score", 0.5)
+    categories = [c.value if hasattr(c, "value") else str(c) for c in categories_result.get("categories", [])]
 
     # Calculate overall confidence
+    cat_confidences = list(categories_result.get("confidences", {}).values())
+    avg_cat_confidence = sum(cat_confidences) / max(len(cat_confidences), 1) if cat_confidences else 0.8
+
     confidence_score = (
         sentiment_result.get("confidence", 0.8) * 0.4
         + urgency_result.get("confidence", 0.8) * 0.3
-        + (
-            sum(cat.get("confidence", 0.8) for cat in categories)
-            / max(len(categories), 1)
-        )
-        * 0.3
+        + avg_cat_confidence * 0.3
     )
 
     return {
         "sentiment_score": sentiment_score,
-        "urgency_level": urgency_result["urgency_level"],
-        "categories": [cat["category"] for cat in categories],
+        "urgency_level": urgency_result.get("urgency_level", "low"),
+        "categories": categories,
         "confidence_score": confidence_score,
         "analysis_metadata": {
-            "sentiment_details": {"score": sentiment_score},
+            "sentiment_details": sentiment_result,
             "urgency_details": urgency_result,
-            "category_details": categories,
+            "category_details": categories_result,
         },
     }
 
@@ -344,8 +348,6 @@ def cleanup_old_reviews(self, days_old: int = 90) -> Dict[str, Any]:
 async def _cleanup_old_reviews_async(days_old: int) -> Dict[str, Any]:
     """Clean up old reviews asynchronously"""
     async with get_async_db_context() as db:
-        from sqlalchemy import delete, select
-
         cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_old)
 
         # Count reviews to be cleaned up

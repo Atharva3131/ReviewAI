@@ -63,11 +63,11 @@ class ConsentRecord:
         method: ConsentMethod,
         purpose: str,
         legal_basis: str = "consent",
-        granted_at: datetime = None,
-        expires_at: datetime = None,
-        withdrawn_at: datetime = None,
-        ip_address: str = None,
-        user_agent: str = None,
+        granted_at: Optional[datetime] = None,
+        expires_at: Optional[datetime] = None,
+        withdrawn_at: Optional[datetime] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
         version: str = "1.0",
     ):
         self.user_id = user_id
@@ -195,9 +195,9 @@ class ConsentManagementService:
         consent_type: ConsentType,
         granted: bool,
         method: ConsentMethod,
-        ip_address: str = None,
-        user_agent: str = None,
-        purpose_details: str = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        purpose_details: Optional[str] = None,
     ) -> ConsentRecord:
         """Record user consent"""
 
@@ -268,18 +268,19 @@ class ConsentManagementService:
 
             if user:
                 # Update consent fields based on type
+                now = datetime.now(timezone.utc)
                 if consent_type == ConsentType.MARKETING:
-                    user.marketing_consent = granted
-                    user.marketing_consent_date = datetime.now(timezone.utc)
+                    setattr(user, "marketing_consent", granted)
+                    setattr(user, "marketing_consent_date", now)
                 elif consent_type == ConsentType.ANALYTICS:
-                    user.analytics_consent = granted
-                    user.analytics_consent_date = datetime.now(timezone.utc)
+                    setattr(user, "analytics_consent", granted)
+                    setattr(user, "analytics_consent_date", now)
                 elif consent_type == ConsentType.FUNCTIONAL:
-                    user.functional_consent = granted
-                    user.functional_consent_date = datetime.now(timezone.utc)
+                    setattr(user, "functional_consent", granted)
+                    setattr(user, "functional_consent_date", now)
                 elif consent_type == ConsentType.PERSONALIZATION:
-                    user.personalization_consent = granted
-                    user.personalization_consent_date = datetime.now(timezone.utc)
+                    setattr(user, "personalization_consent", granted)
+                    setattr(user, "personalization_consent_date", now)
 
                 db.commit()
 
@@ -297,8 +298,8 @@ class ConsentManagementService:
 
             if customer:
                 if consent_type == ConsentType.MARKETING:
-                    customer.marketing_consent = granted
-                    customer.marketing_consent_date = datetime.now(timezone.utc)
+                    setattr(customer, "marketing_consent", granted)
+                    setattr(customer, "marketing_consent_date", datetime.now(timezone.utc))
 
                 db.commit()
 
@@ -310,7 +311,7 @@ class ConsentManagementService:
         user_id: str,
         organization_id: str,
         consent_type: ConsentType,
-        reason: str = None,
+        reason: Optional[str] = None,
     ) -> bool:
         """Withdraw user consent"""
 
@@ -361,7 +362,7 @@ class ConsentManagementService:
         """Get current consent status for user"""
         user_records = self.consent_records.get(user_id, [])
 
-        current_consent = {}
+        current_consent: Dict[ConsentType, ConsentRecord] = {}
 
         for record in user_records:
             if record.organization_id == organization_id:
@@ -415,8 +416,8 @@ class ConsentManagementService:
         organization_id: str,
         consent_choices: Dict[str, bool],
         method: ConsentMethod,
-        ip_address: str = None,
-        user_agent: str = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
     ) -> List[ConsentRecord]:
         """Record multiple consent choices at once"""
         records = []
@@ -440,7 +441,7 @@ class ConsentManagementService:
         return records
 
     def get_consent_history(
-        self, user_id: str, organization_id: str, consent_type: ConsentType = None
+        self, user_id: str, organization_id: str, consent_type: Optional[ConsentType] = None
     ) -> List[ConsentRecord]:
         """Get consent history for user"""
         user_records = self.consent_records.get(user_id, [])
@@ -453,7 +454,7 @@ class ConsentManagementService:
         ]
 
         # Filter by consent type if specified
-        if consent_type:
+        if consent_type is not None:
             org_records = [
                 record for record in org_records if record.consent_type == consent_type
             ]
@@ -504,7 +505,7 @@ class ConsentManagementService:
             )
 
         # Count by consent type and status
-        consent_stats = {}
+        consent_stats: Dict[str, Dict[str, Any]] = {}
         for consent_type in ConsentType:
             consent_stats[consent_type.value] = {
                 "granted": 0,
@@ -512,6 +513,7 @@ class ConsentManagementService:
                 "withdrawn": 0,
                 "expired": 0,
                 "total": 0,
+                "consent_rate": 0.0,
             }
 
         for record in org_records:
@@ -559,17 +561,15 @@ class ConsentManagementService:
                 user_id = str(user.id)
 
                 # Marketing consent
-                if (
-                    hasattr(user, "marketing_consent")
-                    and user.marketing_consent is not None
-                ):
+                marketing_consent = getattr(user, "marketing_consent", None)
+                if marketing_consent is not None:
                     record = ConsentRecord(
                         user_id=user_id,
                         organization_id=organization_id,
                         consent_type=ConsentType.MARKETING,
                         status=(
                             ConsentStatus.GRANTED
-                            if user.marketing_consent
+                            if bool(marketing_consent)
                             else ConsentStatus.DENIED
                         ),
                         method=ConsentMethod.OPT_IN_FORM,
@@ -584,17 +584,15 @@ class ConsentManagementService:
                     self.consent_records[user_id].append(record)
 
                 # Analytics consent
-                if (
-                    hasattr(user, "analytics_consent")
-                    and user.analytics_consent is not None
-                ):
+                analytics_consent = getattr(user, "analytics_consent", None)
+                if analytics_consent is not None:
                     record = ConsentRecord(
                         user_id=user_id,
                         organization_id=organization_id,
                         consent_type=ConsentType.ANALYTICS,
                         status=(
                             ConsentStatus.GRANTED
-                            if user.analytics_consent
+                            if bool(analytics_consent)
                             else ConsentStatus.DENIED
                         ),
                         method=ConsentMethod.COOKIE_BANNER,

@@ -181,7 +181,7 @@ class FieldLevelEncryption:
         """
         self.data_encryption = DataEncryption(encryption_key)
 
-    def encrypt_field(self, value: Any, field_name: str) -> str:
+    def encrypt_field(self, value: Any, field_name: str) -> Optional[str]:
         """
         Encrypt a database field value
 
@@ -207,7 +207,7 @@ class FieldLevelEncryption:
             logger.error(f"Failed to encrypt field {field_name}: {e}")
             raise EncryptionError(f"Field encryption failed for {field_name}")
 
-    def decrypt_field(self, encrypted_value: str, field_name: str) -> str:
+    def decrypt_field(self, encrypted_value: Optional[str], field_name: str) -> Optional[str]:
         """
         Decrypt a database field value
 
@@ -276,6 +276,8 @@ class TransitEncryption:
             public_key = serialization.load_pem_public_key(
                 public_key_pem, backend=default_backend()
             )
+            if not isinstance(public_key, rsa.RSAPublicKey):
+                raise EncryptionError("Invalid RSA public key")
 
             encrypted = public_key.encrypt(
                 data.encode("utf-8"),
@@ -308,6 +310,8 @@ class TransitEncryption:
             private_key = serialization.load_pem_private_key(
                 private_key_pem, password=None, backend=default_backend()
             )
+            if not isinstance(private_key, rsa.RSAPrivateKey):
+                raise EncryptionError("Invalid RSA private key")
 
             encrypted_bytes = base64.b64decode(encrypted_data.encode("utf-8"))
 
@@ -429,15 +433,15 @@ class HashingService:
 class EncryptionKeyManager:
     """Manages encryption keys and key rotation"""
 
-    def __init__(self, key_storage_path: str = None):
+    def __init__(self, key_storage_path: Optional[str] = None):
         """
         Initialize key manager
 
         Args:
             key_storage_path: Path to store encryption keys
         """
-        self.key_storage_path = key_storage_path or os.getenv(
-            "ENCRYPTION_KEY_PATH", "/tmp/keys"
+        self.key_storage_path: str = (
+            key_storage_path or os.getenv("ENCRYPTION_KEY_PATH") or "/tmp/keys"
         )
         self.ensure_key_directory()
 
@@ -493,7 +497,7 @@ class EncryptionKeyManager:
             logger.error(f"Failed to load encryption key {key_name}: {e}")
             raise EncryptionError(f"Key loading failed: {e}")
 
-    def rotate_key(self, key_name: str) -> tuple[str, str]:
+    def rotate_key(self, key_name: str) -> tuple[str, Optional[str]]:
         """
         Rotate encryption key (generate new, keep old)
 

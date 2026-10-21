@@ -8,14 +8,15 @@ from typing import Any, AsyncGenerator, Dict
 
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 # Base declarative class
-Base = declarative_base()
+class Base(DeclarativeBase):
+    pass
 
 # Build database URLs cleanly
 database_url = settings.DATABASE_URL

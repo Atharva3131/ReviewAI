@@ -142,22 +142,22 @@ class Review(Base):
     @property
     def is_positive(self) -> bool:
         """Check if review is positive (4-5 stars)"""
-        return bool(self.rating >= 4)
+        return self.rating >= 4
 
     @property
     def is_negative(self) -> bool:
         """Check if review is negative (1-2 stars)"""
-        return bool(self.rating <= 2)
+        return self.rating <= 2
 
     @property
     def is_neutral(self) -> bool:
         """Check if review is neutral (3 stars)"""
-        return bool(self.rating == 3)
+        return self.rating == 3
 
     @property
     def is_critical(self) -> bool:
         """Check if review is critical (needs immediate attention)"""
-        return bool(self.rating <= 2 and self.urgency_level == UrgencyLevel.HIGH)
+        return self.rating <= 2 and self.urgency_level == UrgencyLevel.HIGH
 
     @property
     def sentiment_label(self) -> str:

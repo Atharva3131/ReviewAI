@@ -109,8 +109,12 @@ async def ingest_demo_review(
             await db.flush()
             review_id = str(review.id)
         except Exception as db_err:
-            logger.warning(f"Database unavailable for demo review persistence ({db_err}). Proceeding in memory.")
-            review_id = f"demo-review-{int(datetime.now().timestamp())}"
+            logger.error("Demo review persistence failed", exc_info=True)
+            await db.rollback()
+            raise HTTPException(
+                status_code=503,
+                detail="Demo review could not be persisted. Please try again later.",
+            ) from db_err
 
         # 3. Run sentiment analysis
         sentiment_result = await agent_engine.sentiment_service.analyze_sentiment(
@@ -155,8 +159,13 @@ async def ingest_demo_review(
 
         try:
             await db.commit()
-        except Exception:
-            pass
+        except Exception as db_err:
+            logger.error("Demo review commit failed", exc_info=True)
+            await db.rollback()
+            raise HTTPException(
+                status_code=503,
+                detail="Demo review could not be persisted. Please try again later.",
+            ) from db_err
 
         return DemoReviewResponse(
             review_id=review_id,
@@ -174,6 +183,8 @@ async def ingest_demo_review(
             reasoning=policy_result.get("reason", ""),
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Demo review ingestion failed: {e}", exc_info=True)
         try:

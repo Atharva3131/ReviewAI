@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Check, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import api from '@/lib/api';
 
 interface SubscriptionPlan {
   id: string;
@@ -23,6 +24,7 @@ export default function PricingPage() {
   const router = useRouter();
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly');
 
   useEffect(() => {
@@ -32,11 +34,12 @@ export default function PricingPage() {
   const fetchPlans = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/billing/plans`);
-      const data = await response.json();
-      setPlans(data);
-    } catch (error) {
+      setError(null);
+      const response = await api.get('/billing/plans');
+      setPlans(response.data);
+    } catch (error: any) {
       console.error('Failed to fetch plans:', error);
+      setError(error.response?.data?.detail || 'Unable to load pricing plans.');
     } finally {
       setLoading(false);
     }
@@ -111,6 +114,11 @@ export default function PricingPage() {
 
       {/* Pricing Cards */}
       <section className='container mx-auto px-4 pb-16'>
+        {error && (
+          <div className='mb-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700'>
+            {error}
+          </div>
+        )}
         <div className='grid md:grid-cols-3 gap-8 max-w-6xl mx-auto'>
           {plans.map((plan, index) => (
             <Card

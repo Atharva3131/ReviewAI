@@ -76,6 +76,7 @@ export default function DashboardPage() {
   } = useActionQueue();
 
   const { startTour, hasCompletedTour, markTourComplete } = useTour();
+  const useMockDashboardData = process.env.NODE_ENV !== 'production';
 
   // Auto-start tour for first-time users
   useEffect(() => {
@@ -159,9 +160,13 @@ export default function DashboardPage() {
   };
 
   // Use real data if available, otherwise fall back to mock data
-  const displayMetrics = metrics || mockMetrics;
-  const displayActivities = activityData?.activities || mockActivities;
-  const displayActions = actionData?.actions || mockActions;
+  const displayMetrics = useMockDashboardData ? metrics || mockMetrics : metrics;
+  const displayActivities = useMockDashboardData
+    ? activityData?.activities || mockActivities
+    : activityData?.activities || [];
+  const displayActions = useMockDashboardData
+    ? actionData?.actions || mockActions
+    : actionData?.actions || [];
 
   const hasError = metricsError || activityError || actionError;
   // Only show loading on initial load when we have no data at all
@@ -235,7 +240,9 @@ export default function DashboardPage() {
           <div className='flex'>
             <AlertTriangle className='h-5 w-5 mr-2' />
             <span className='text-sm'>
-              Some data may be unavailable - Showing sample data for demonstration
+              {useMockDashboardData
+                ? 'Some data may be unavailable - Showing sample data for development'
+                : 'Some live data is unavailable. The displayed values may be incomplete.'}
             </span>
           </div>
         </div>

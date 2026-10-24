@@ -1,297 +1,116 @@
-# ReviewAI — AWS Manual Deployment Guide
+# ReviewAI AWS deployment
 
-This guide provides step-by-step instructions to manually deploy the ReviewAI application to AWS using Amazon ECS Fargate, RDS PostgreSQL, Amazon Bedrock, Amazon S3, AWS Secrets Manager, and AWS CloudWatch.
+This runbook deploys the existing FastAPI backend only. Terraform creates one ECR repository, an ECS Fargate service behind a public HTTP ALB, private RDS PostgreSQL, a VPC with private task/database subnets, Secrets Manager secrets, Bedrock task permissions, and CloudWatch logs/alarms. Redis and the frontend are intentionally not deployed.
 
----
+## Commands, in order
 
-## Architecture Overview
-
-```
-Frontend (S3 + CloudFront / Vercel / Amplify)
-       ↓ (HTTPS)
-Application Load Balancer (ALB)
-       ↓
-ECS Fargate (FastAPI Backend Container)
-       ├── RDS PostgreSQL (Database & Schema via Alembic)
-       ├── ElastiCache Redis (Optional Caching / Celery Broker)
-       ├── Amazon S3 (Knowledge Base & Artifacts)
-       ├── AWS Secrets Manager (Production Credentials)
-       ├── Amazon Bedrock (Production LLM — Claude 3 / Titan)
-       └── Amazon CloudWatch (Application Logs & Metrics)
-```
-
----
-
-## STEP 1 — Create RDS PostgreSQL
-
-1. Go to **AWS RDS Console** → **Create database**.
-2. **Engine type**: PostgreSQL (Version 15 or 16).
-3. **Templates**: Free Tier / Dev/Test (or Production single-AZ for cost optimization).
-4. **Settings**:
-   - DB instance identifier: `reviewai-db`
-   - Master username: `reviewai_user`
-   - Master password: `(secure-password)`
-5. **DB Instance class**: `db.t4g.micro` (cost conscious).
-6. **Storage**: 20 GB gp3.
-7. **Connectivity**:
-   - VPC: Default VPC or `reviewai-vpc`
-   - Public access: **No** (Private subnet access only)
-   - VPC Security Group: Create new `reviewai-rds-sg` allowing **Inbound TCP 5432** only from `reviewai-ecs-sg`.
-8. **Additional Configuration**:
-   - Initial database name: `revive_ai`
-9. **Connection String Format**:
-   `postgresql://reviewai_user:<password>@<rds-endpoint>:5432/revive_ai`
-
----
-
-## STEP 2 — Create Amazon S3 Bucket
-
-1. Go to **AWS S3 Console** → **Create bucket**.
-2. **Bucket name**: `reviewai-data-<your-account-id>` (must be globally unique).
-3. **Region**: `us-east-1` (matching Bedrock & ECS).
-4. **Block Public Access**: Enable all public access blocks.
-5. **Prefix convention**: All non-transactional application data will be stored under `reviewai/` (e.g. `reviewai/knowledge/`, `reviewai/artifacts/`).
-
----
-
-## STEP 3 — Configure Amazon Bedrock
-
-1. Go to **AWS Bedrock Console** → **Model access** in `us-east-1`.
-2. Request access for **Anthropic Claude 3 Haiku** (`anthropic.claude-3-haiku-20240307-v1:0`) or **Amazon Titan Text Express**.
-3. Ensure your ECS Task Role (see Step 7) has the following IAM policy attached:
-   ```json
-   {
-     "Version": "2012-10-17",
-     "Statement": [
-       {
-         "Effect": "Allow",
-         "Action": [
-           "bedrock:InvokeModel",
-           "bedrock:InvokeModelWithResponseStream"
-         ],
-         "Resource": "*"
-       }
-     ]
-   }
-   ```
-4. Configuration variables to set:
-   - `LLM_PROVIDER`: `bedrock`
-   - `BEDROCK_MODEL_ID`: `anthropic.claude-3-haiku-20240307-v1:0`
-   - `BEDROCK_REGION`: `us-east-1`
-
----
-
-## STEP 4 — Create Secrets Manager Secret
-
-1. Go to **AWS Secrets Manager** → **Store a new secret**.
-2. **Secret type**: Other type of secret (Key/value pairs).
-3. Secret name: `reviewai/production/secrets`
-4. Add key-value pairs:
-   - `DATABASE_URL`: `postgresql://reviewai_user:<password>@<rds-endpoint>:5432/revive_ai`
-   - `SECRET_KEY`: `<random-long-secret-key>` *(Generic application secret for internal cryptography and session security; JWT authentication is disabled/removed)*
-   - `REDIS_URL`: `redis://<elasticache-endpoint>:6379` (if using ElastiCache, else leave default)
-
----
-
-## STEP 5 — Create Amazon ECR Repository & Push Container
-
-1. Go to **AWS ECR Console** → **Create repository**.
-   - Name: `reviewai-backend`
-2. Run build and push commands locally:
-   ```bash
-   # 1. Authenticate Docker to your ECR registry
-   aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <aws-account-id>.dkr.ecr.us-east-1.amazonaws.com
-
-   # 2. Build the production Docker image
-   docker build -t reviewai-backend ./backend
-
-   # 3. Tag the image for ECR
-   docker tag reviewai-backend:latest <aws-account-id>.dkr.ecr.us-east-1.amazonaws.com/reviewai-backend:latest
-
-   # 4. Push to ECR
-   docker push <aws-account-id>.dkr.ecr.us-east-1.amazonaws.com/reviewai-backend:latest
-   ```
-
----
-
-## STEP 6 — Create ECS Cluster
-
-1. Go to **AWS ECS Console** → **Clusters** → **Create Cluster**.
-2. **Cluster name**: `reviewai-cluster`
-3. **Infrastructure**: AWS Fargate (serverless).
-
----
-
-## STEP 7 — Create ECS Task Definition
-
-1. Go to **ECS Console** → **Task definitions** → **Create new task definition**.
-2. **Family name**: `reviewai-backend-task`
-3. **Infrastructure**: AWS Fargate
-4. **CPU**: `0.5 vCPU` (512) | **Memory**: `1 GB` (1024)
-5. **Task Execution Role** (`ecsTaskExecutionRole` - used by AWS ECS agent to launch container):
-   - Policy `AmazonECSTaskExecutionRolePolicy` (ECR pull & CloudWatch `awslogs` stream creation)
-   - Inline policy for `secretsmanager:GetSecretValue` on secret `reviewai/production/secrets` to inject environment variables into the container at startup.
-6. **Task Role** (`reviewai-ecs-task-role` - used directly by backend Python code / boto3 at runtime):
-   - **Amazon Bedrock Policy**:
-     ```json
-     {
-       "Version": "2012-10-17",
-       "Statement": [
-         {
-           "Effect": "Allow",
-           "Action": [
-             "bedrock:InvokeModel",
-             "bedrock:InvokeModelWithResponseStream"
-           ],
-           "Resource": "*"
-         }
-       ]
-     }
-     ```
-   - **Amazon S3 Policy** (for knowledge base / storage operations):
-     ```json
-     {
-       "Version": "2012-10-17",
-       "Statement": [
-         {
-           "Effect": "Allow",
-           "Action": [
-             "s3:GetObject",
-             "s3:PutObject",
-             "s3:ListBucket"
-           ],
-           "Resource": [
-             "arn:aws:s3:::reviewai-data-*",
-             "arn:aws:s3:::reviewai-data-*/*"
-           ]
-         }
-       ]
-     }
-     ```
-   - *(Note: Direct CloudWatch logging permissions are handled by `awslogs` driver via Task Execution Role since stdout/stderr are captured automatically. If application code reads Secrets Manager directly at runtime via boto3 instead of ECS secret injection, attach `secretsmanager:GetSecretValue` to the Task Role as well).*
-7. **Container Details**:
-   - Name: `backend`
-   - Image URI: `<aws-account-id>.dkr.ecr.us-east-1.amazonaws.com/reviewai-backend:latest`
-   - Port mapping: `8000` TCP
-8. **Environment Variables**:
-   - `APP_ENV`: `production`
-   - `DEBUG`: `false`
-   - `LOG_LEVEL`: `INFO`
-   - `LLM_PROVIDER`: `bedrock`
-   - `BEDROCK_MODEL_ID`: `anthropic.claude-3-haiku-20240307-v1:0`
-   - `BEDROCK_REGION`: `us-east-1`
-   - `AWS_REGION`: `us-east-1`
-   - `AWS_S3_BUCKET`: `reviewai-data-<your-account-id>`
-   - `AWS_SECRETS_MANAGER_SECRET_NAME`: `reviewai/production/secrets`
-   - `CORS_ALLOWED_ORIGINS`: `https://<your-frontend-domain>`
-9. **Health Check**:
-   - Command: `CMD-SHELL, curl -f http://localhost:8000/health || exit 1`
-   - Interval: 30s | Timeout: 5s | Start period: 10s | Retries: 3
-10. **Log Configuration**:
-   - Log driver: `awslogs`
-   - Log group: `/ecs/reviewai-backend` (Auto-created)
-
----
-
-## STEP 8 — Create Application Load Balancer (ALB)
-
-1. Go to **EC2 Console** → **Load Balancers** → **Create Load Balancer** (Application Load Balancer).
-2. Name: `reviewai-alb` | Scheme: **Internet-facing**
-3. Listeners: HTTP 80 (and HTTPS 443 if ACM certificate attached).
-4. Target Group:
-   - Target type: **IP**
-   - Protocol: HTTP | Port: 8000
-   - Health check path: `/health`
-   - Success code: `200`
-
----
-
-## STEP 9 — Create ECS Service
-
-1. In `reviewai-cluster`, click **Services** → **Create**.
-2. **Launch type**: Fargate
-3. **Task definition**: `reviewai-backend-task:1`
-4. **Service name**: `reviewai-backend-service`
-5. **Desired tasks**: `1`
-6. **Networking**:
-   - VPC & Subnets: Select public or private subnets
-   - Security Group: `reviewai-ecs-sg` allowing TCP 8000 from `reviewai-alb`
-7. **Load balancing**: Select `reviewai-alb` and attach target group on port 8000.
-
----
-
-## STEP 10 — Run Database Migrations
-
-Run Alembic migration against the production RDS PostgreSQL database from a task runner or local workstation connected to RDS:
+Install AWS CLI v2, Terraform 1.5+, Docker, `psql`, and Python 3.11. Choose a region where the selected Bedrock model is enabled. Set shell variables; do not commit a file containing them.
 
 ```bash
-# Option A: Run via temporary ECS Task or One-Time Command
-docker run --rm \
-  -e DATABASE_URL="postgresql://reviewai_user:<password>@<rds-endpoint>:5432/revive_ai" \
-  <aws-account-id>.dkr.ecr.us-east-1.amazonaws.com/reviewai-backend:latest \
-  alembic upgrade head
-
-# Option B: Run locally inside virtualenv pointing to RDS
-export DATABASE_URL="postgresql://reviewai_user:<password>@<rds-endpoint>:5432/revive_ai"
-alembic upgrade head
+export AWS_REGION=us-east-1
+export PROJECT=reviewai
+export TF_STATE_BUCKET="replace-with-a-globally-unique-reviewai-state-bucket"
+export TF_STATE_KEY="production/terraform.tfstate"
+export IMAGE_TAG="$(git rev-parse --short HEAD)"
 ```
 
----
+1. Verify identity, region, and Bedrock access:
 
-## STEP 11 — Frontend Production Configuration & Deployment
+```bash
+aws sts get-caller-identity
+aws configure get region || true
+aws ec2 describe-availability-zones --region "$AWS_REGION" --query 'AvailabilityZones[?State==`available`].ZoneName' --output text
+aws bedrock list-foundation-models --region "$AWS_REGION" --query 'modelSummaries[?contains(modelId, `claude-3-haiku`)].modelId' --output text
+```
 
-1. Set production environment variable in frontend build:
-   `NEXT_PUBLIC_API_URL=http://<alb-dns-name>` (or `https://api.yourdomain.com`)
-2. Build static bundle or deploy to Vercel/S3+CloudFront:
-   ```bash
-   cd frontend
-   npm run build
-   ```
-3. If hosting on S3 + CloudFront:
-   - Upload `.next` or static build output to frontend S3 bucket.
-   - Configure CloudFront distribution pointing to S3 origin with fallback to `index.html`.
+2. Bootstrap the remote state bucket once. This is the only manual AWS resource bootstrap and creates no application resources. For `us-east-1`, omit the location constraint.
 
----
+```bash
+aws s3api create-bucket --bucket "$TF_STATE_BUCKET" --region "$AWS_REGION" \
+  --create-bucket-configuration LocationConstraint="$AWS_REGION"
+aws s3api put-bucket-versioning --bucket "$TF_STATE_BUCKET" --versioning-configuration Status=Enabled
+aws s3api put-bucket-encryption --bucket "$TF_STATE_BUCKET" --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+```
 
-## STEP 12 — Health & Service Verification
+For `us-east-1`, rerun the first command without `--create-bucket-configuration` if needed.
 
-Run verification requests against the deployed ALB URL (`http://<alb-dns-name>`):
+3. Initialize, format, and validate Terraform:
 
-1. **Process Health Check**:
-   ```bash
-   curl http://<alb-dns-name>/health
-   # Expected response: {"status":"healthy","environment":"production","service":"ReviewAI"}
-   ```
+```bash
+cd aws/terraform
+terraform init -backend-config="bucket=$TF_STATE_BUCKET" -backend-config="key=$TF_STATE_KEY" -backend-config="region=$AWS_REGION" -backend-config="encrypt=true"
+terraform fmt -check -recursive
+terraform validate
+```
 
-2. **Readiness & Service Check**:
-   ```bash
-   curl http://<alb-dns-name>/ready
-   # Expected response: {"status":"ready","database":"ok","llm_provider":"bedrock",...}
-   ```
+4. Create only ECR first. This handles the bootstrap dependency explicitly: ECS must not start before an image exists.
 
-3. **Demo Ingestion Test**:
-   ```bash
-   curl -X POST http://<alb-dns-name>/api/v1/demo/ingest-demo-review \
-     -H "Content-Type: application/json" \
-     -d '{
-       "customer_name": "Public Demo User",
-       "rating": 1,
-       "review_text": "The service was terrible and support never responded to my ticket!"
-     }'
-   ```
+```bash
+terraform plan -target=aws_ecr_repository.backend -target=aws_ecr_lifecycle_policy.backend -var="aws_region=$AWS_REGION" -var="project_name=$PROJECT"
+terraform apply -target=aws_ecr_repository.backend -target=aws_ecr_lifecycle_policy.backend -var="aws_region=$AWS_REGION" -var="project_name=$PROJECT"
+```
 
----
+Review the targeted plan and approve it interactively. Do not use `-auto-approve`.
 
-## STEP 13 — Complete End-to-End Demo Flow
+5. Build and push the backend image:
 
-1. Open Deployed Frontend Dashboard in browser: `http://<frontend-url>`
-2. Click **"Simulate Google Review"**.
-3. Submit a 1-star Google Review.
-4. Verify complete automated AI pipeline execution:
-   - **Ingestion**: Google Review recorded in RDS PostgreSQL.
-   - **Sentiment & Urgency**: Analyzed and scored.
-   - **Decision Model**: Category determined (`PRODUCT_QUALITY` / `SERVICE_ISSUE`).
-   - **ML Risk**: Churn probability computed.
-   - **Bedrock LLM**: Empathetic recovery response generated via Amazon Bedrock.
-   - **Policy Engine**: Strategy assigned (`AUTO_EXECUTE` / `APPROVAL_REQUIRED`).
-   - **Dashboard**: Real-time update showing persisted results in metrics & tables.
+```bash
+ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+ECR_URI="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$PROJECT-backend"
+aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+docker build -t "$ECR_URI:$IMAGE_TAG" ./backend
+docker push "$ECR_URI:$IMAGE_TAG"
+```
+
+6. Plan, review, and apply all remaining resources:
+
+```bash
+terraform plan -out=reviewai.tfplan -var="aws_region=$AWS_REGION" -var="project_name=$PROJECT" -var="image_tag=$IMAGE_TAG"
+terraform show reviewai.tfplan
+terraform apply reviewai.tfplan
+```
+
+7. Run the one-time Alembic migration against private RDS. Use a private CI runner or an SSM port-forwarding path through a temporary managed host. Never use the local default database.
+
+```bash
+test -n "$(find ../../backend/alembic/versions -type f -name '*.py' -not -name '__init__.py' -print -quit)" || { echo 'No Alembic revision exists; create and review the initial migration first.'; exit 1; }
+RDS_MASTER_SECRET_ARN="$(terraform output -raw rds_master_secret_arn)"
+export RDS_SECRET_JSON="$(aws secretsmanager get-secret-value --secret-id "$RDS_MASTER_SECRET_ARN" --region "$AWS_REGION" --query SecretString --output text)"
+export DATABASE_URL="$(python3 -c 'import json, os; from urllib.parse import quote; s=json.loads(os.environ["RDS_SECRET_JSON"]); print(f"postgresql://{quote(s[\"username\"])}:{quote(s[\"password\"])}@{s[\"host\"]}:{s[\"port\"]}/{s[\"dbname\"]}?sslmode=require")')"
+cd ../../backend
+APP_ENV=production DATABASE_URL="$DATABASE_URL" alembic upgrade head
+unset RDS_SECRET_JSON
+unset DATABASE_URL
+cd ../aws/terraform
+```
+
+Do not put `alembic upgrade head` in the Dockerfile, ECS command, or FastAPI startup lifecycle.
+
+8. Inspect ECS and CloudWatch:
+
+```bash
+aws ecs describe-services --cluster "$PROJECT-cluster" --services "$PROJECT-backend" --region "$AWS_REGION" --query 'services[0].{running:runningCount,desired:desiredCount,status:status,events:events[0:5]}'
+aws logs tail "/ecs/$PROJECT/backend" --since 15m --follow --region "$AWS_REGION"
+```
+
+9. Test the public API end to end:
+
+```bash
+ALB_DNS="$(terraform output -raw alb_dns_name)"
+curl --fail --show-error "http://$ALB_DNS/health"
+curl --fail --show-error "http://$ALB_DNS/ready"
+```
+
+The frontend is not deployed by Terraform. Build it separately with `NEXT_PUBLIC_API_URL=http://$ALB_DNS npm run build` only after the API passes these checks, using the existing frontend hosting setup.
+
+## Current blocker
+
+At preparation time, `backend/alembic/versions/` contained only `.gitkeep`. Generate and review an initial migration from the complete model set, commit it, and rerun the revision check before sending production traffic. Terraform/app deployment is not database readiness.
+
+## Cost risks
+
+Always-on costs are primarily one NAT Gateway, one internet-facing ALB, one `db.t4g.micro` RDS instance with 20 GiB gp3 storage, and one 0.25 vCPU/512 MiB Fargate task. CloudWatch logs, ECR storage, RDS backups, public IPv4, and Bedrock token usage add variable cost; Bedrock can dominate at high volume. RDS deletion protection and final snapshots are enabled.
+
+## Unavoidable console/manual steps
+
+Enable Bedrock model access if the account requires it. Provide a private network path for the migration command. The Terraform stack does not deploy the frontend or configure a domain/TLS certificate.

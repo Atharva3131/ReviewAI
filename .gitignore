@@ -113,3 +113,33 @@ railway-env-template.txt
 # Railway deployment files (optional)
 railway-setup.bat
 railway-setup.sh
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+
+# AWS CLI installer
+awscliv2.zip
+
+# Python-generated files
+**/__pycache__/
+*.py[cod]
+.coverage
+pytest_collect.txt
+# Terraform generated files and local state
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+
+# AWS CLI installer
+awscliv2.zip
+
+# Python test artifacts
+.coverage
+**/__pycache__/
+*.py[cod]

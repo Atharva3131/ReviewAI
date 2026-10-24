@@ -1,6 +1,7 @@
 """Alembic environment configuration for Revive AI"""
 from logging.config import fileConfig
 from sqlalchemy import Connection, engine_from_config, pool
+from sqlalchemy.engine import make_url
 from alembic import context
 import os
 import sys
@@ -10,7 +11,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from app.core.config import settings
 from app.core.database import Base
-import app.models  # load all models for alembic autogenerate
+import app.models  # load all active models for Alembic metadata
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -23,6 +24,20 @@ if config.config_file_name is not None:
 
 # add your model's MetaData object here
 # for 'autogenerate' support
+ACTIVE_TABLES = {
+    "customers",
+    "reviews",
+    "support_tickets",
+    "recovery_actions",
+    "agent_decisions",
+    "business_knowledge",
+}
+if set(Base.metadata.tables) != ACTIVE_TABLES:
+    raise RuntimeError(
+        "Alembic metadata does not match the active single-user schema: "
+        f"expected {sorted(ACTIVE_TABLES)}, found {sorted(Base.metadata.tables)}"
+    )
+
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
@@ -32,8 +47,28 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    """Get database URL from environment or config"""
-    url = os.getenv("DATABASE_URL", settings.DATABASE_URL)
+    """Get a safe PostgreSQL URL from the environment/application settings."""
+    configured_url = os.getenv("DATABASE_URL")
+    url = configured_url or settings.DATABASE_URL
+
+    parsed_url = make_url(url)
+    if settings.APP_ENV.lower() in {"production", "prod", "staging"}:
+        if not configured_url:
+            raise RuntimeError(
+                "DATABASE_URL must be explicitly set for production/staging migrations; "
+                "refusing the local default database"
+            )
+        if parsed_url.host in {"localhost", "127.0.0.1", "::1"}:
+            raise RuntimeError(
+                "Production/staging migrations may not target a local PostgreSQL host"
+            )
+
+    if settings.DB_SSL and parsed_url.drivername in {"postgresql", "postgresql+psycopg"}:
+        query = dict(parsed_url.query)
+        query.setdefault("sslmode", "require")
+        parsed_url = parsed_url.set(query=query)
+        url = str(parsed_url)
+
     # Convert to psycopg driver for sync operations
     if url.startswith("postgresql://"):
         url = url.replace("postgresql://", "postgresql+psycopg://")

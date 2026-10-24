@@ -1,449 +1,207 @@
-# ECS Cluster
-resource "aws_ecs_cluster" "main" {
-  name = "${var.project_name}-cluster"
-  
-  configuration {
-    execute_command_configuration {
-      logging = "OVERRIDE"
-      
-      log_configuration {
-        cloud_watch_encryption_enabled = true
-        cloud_watch_log_group_name     = aws_cloudwatch_log_group.ecs_exec.name
-      }
-    }
-  }
-  
-  setting {
-    name  = "containerInsights"
-    value = "enabled"
-  }
-  
-  tags = {
-    Name = "${var.project_name}-cluster"
-  }
-}
-
-# CloudWatch Log Groups
-resource "aws_cloudwatch_log_group" "ecs_exec" {
-  name              = "/aws/ecs/${var.project_name}/exec"
-  retention_in_days = 7
-  
-  tags = {
-    Name = "${var.project_name}-ecs-exec-logs"
-  }
-}
-
-resource "aws_cloudwatch_log_group" "backend" {
-  name              = "/ecs/${var.project_name}-backend"
-  retention_in_days = 30
-  
-  tags = {
-    Name = "${var.project_name}-backend-logs"
-  }
-}
-
-resource "aws_cloudwatch_log_group" "celery_worker" {
-  name              = "/ecs/${var.project_name}-celery-worker"
-  retention_in_days = 30
-  
-  tags = {
-    Name = "${var.project_name}-celery-worker-logs"
-  }
-}
-
-resource "aws_cloudwatch_log_group" "celery_beat" {
-  name              = "/ecs/${var.project_name}-celery-beat"
-  retention_in_days = 30
-  
-  tags = {
-    Name = "${var.project_name}-celery-beat-logs"
-  }
-}
-
-# ECR Repository
 resource "aws_ecr_repository" "backend" {
   name                 = "${var.project_name}-backend"
   image_tag_mutability = "MUTABLE"
-  
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-  
-  encryption_configuration {
-    encryption_type = "AES256"
-  }
-  
-  tags = {
-    Name = "${var.project_name}-backend-ecr"
-  }
+
+  image_scanning_configuration { scan_on_push = true }
+  encryption_configuration { encryption_type = "AES256" }
 }
 
 resource "aws_ecr_lifecycle_policy" "backend" {
   repository = aws_ecr_repository.backend.name
-  
   policy = jsonencode({
-    rules = [
-      {
-        rulePriority = 1
-        description  = "Keep last 10 production images"
-        selection = {
-          tagStatus     = "tagged"
-          tagPrefixList = ["prod"]
-          countType     = "imageCountMoreThan"
-          countNumber   = 10
-        }
-        action = {
-          type = "expire"
-        }
-      },
-      {
-        rulePriority = 2
-        description  = "Keep last 5 development images"
-        selection = {
-          tagStatus     = "tagged"
-          tagPrefixList = ["dev"]
-          countType     = "imageCountMoreThan"
-          countNumber   = 5
-        }
-        action = {
-          type = "expire"
-        }
-      },
-      {
-        rulePriority = 3
-        description  = "Delete untagged images older than 1 day"
-        selection = {
-          tagStatus   = "untagged"
-          countType   = "sinceImagePushed"
-          countUnit   = "days"
-          countNumber = 1
-        }
-        action = {
-          type = "expire"
-        }
+    rules = [{
+      rulePriority = 1
+      description  = "Retain the latest ten tagged backend images"
+      selection = {
+        tagStatus   = "any"
+        countType   = "imageCountMoreThan"
+        countNumber = 10
       }
-    ]
+      action = { type = "expire" }
+    }]
   })
 }
 
-# ECS Task Execution Role
-resource "aws_iam_role" "ecs_task_execution" {
-  name = "${var.project_name}-ecs-task-execution-role"
-  
+resource "aws_ecs_cluster" "main" {
+  name = "${var.project_name}-cluster"
+}
+
+resource "aws_cloudwatch_log_group" "backend" {
+  name              = "/ecs/${var.project_name}/backend"
+  retention_in_days = 7
+}
+
+resource "aws_iam_role" "execution" {
+  name = "${var.project_name}-ecs-execution"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "ecs-tasks.amazonaws.com"
-        }
-      }
-    ]
+    Statement = [{
+      Effect    = "Allow"
+      Action    = "sts:AssumeRole"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+    }]
   })
-  
-  tags = {
-    Name = "${var.project_name}-ecs-task-execution-role"
-  }
 }
 
-resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
-  role       = aws_iam_role.ecs_task_execution.name
+resource "aws_iam_role_policy_attachment" "execution" {
+  role       = aws_iam_role.execution.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-# Additional policy for Secrets Manager access
-resource "aws_iam_role_policy" "ecs_secrets" {
-  name = "${var.project_name}-ecs-secrets-policy"
-  role = aws_iam_role.ecs_task_execution.id
-  
+resource "aws_iam_role_policy" "execution_secrets" {
+  name = "${var.project_name}-ecs-secrets"
+  role = aws_iam_role.execution.id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "secretsmanager:GetSecretValue"
-        ]
-        Resource = [
-          aws_secretsmanager_secret.db_url.arn,
-          aws_secretsmanager_secret.redis_url.arn,
-          aws_secretsmanager_secret.app_secrets.arn
-        ]
-      }
-    ]
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = [aws_db_instance.postgres.master_user_secret[0].secret_arn, aws_secretsmanager_secret.app.arn]
+    }]
   })
 }
 
-# ECS Task Role
-resource "aws_iam_role" "ecs_task" {
-  name = "${var.project_name}-ecs-task-role"
-  
+resource "aws_iam_role" "task" {
+  name = "${var.project_name}-ecs-task"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "ecs-tasks.amazonaws.com"
-        }
-      }
-    ]
+    Statement = [{
+      Effect    = "Allow"
+      Action    = "sts:AssumeRole"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+    }]
   })
-  
-  tags = {
-    Name = "${var.project_name}-ecs-task-role"
-  }
 }
 
-# Task role policy for application permissions
-resource "aws_iam_role_policy" "ecs_task_policy" {
-  name = "${var.project_name}-ecs-task-policy"
-  role = aws_iam_role.ecs_task.id
-  
+resource "aws_iam_role_policy" "task_bedrock" {
+  name = "${var.project_name}-bedrock"
+  role = aws_iam_role.task.id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:DeleteObject"
-        ]
-        Resource = [
-          "${aws_s3_bucket.uploads.arn}/*"
-        ]
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "ses:SendEmail",
-          "ses:SendRawEmail"
-        ]
-        Resource = "*"
-      }
-    ]
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
+      Resource = "arn:aws:bedrock:${var.aws_region}::foundation-model/*"
+    }]
   })
 }
 
-# Application Load Balancer
 resource "aws_lb" "main" {
   name               = "${var.project_name}-alb"
-  internal           = false
   load_balancer_type = "application"
+  internal           = false
   security_groups    = [aws_security_group.alb.id]
   subnets            = aws_subnet.public[*].id
-  
-  enable_deletion_protection = true
-  
-  access_logs {
-    bucket  = aws_s3_bucket.alb_logs.id
-    prefix  = "alb"
-    enabled = true
-  }
-  
-  tags = {
-    Name = "${var.project_name}-alb"
-  }
 }
 
-# ALB Target Group
 resource "aws_lb_target_group" "backend" {
-  name        = "${var.project_name}-backend-tg"
-  port        = 8000
+  name        = "${var.project_name}-backend"
+  port        = var.container_port
   protocol    = "HTTP"
-  vpc_id      = aws_vpc.main.id
   target_type = "ip"
-  
+  vpc_id      = aws_vpc.main.id
+
   health_check {
-    enabled             = true
-    healthy_threshold   = 2
-    interval            = 30
-    matcher             = "200"
     path                = "/health"
-    port                = "traffic-port"
     protocol            = "HTTP"
+    port                = "traffic-port"
+    matcher             = "200"
+    interval            = 30
     timeout             = 5
-    unhealthy_threshold = 2
-  }
-  
-  tags = {
-    Name = "${var.project_name}-backend-tg"
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
   }
 }
 
-# ALB Listener (HTTP -> HTTPS redirect)
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.main.arn
-  port              = "80"
+  port              = 80
   protocol          = "HTTP"
-  
-  default_action {
-    type = "redirect"
-    
-    redirect {
-      port        = "443"
-      protocol    = "HTTPS"
-      status_code = "HTTP_301"
-    }
-  }
-}
 
-# ALB Listener (HTTPS)
-resource "aws_lb_listener" "https" {
-  load_balancer_arn = aws_lb.main.arn
-  port              = "443"
-  protocol          = "HTTPS"
-  ssl_policy        = "ELBSecurityPolicy-TLS-1-2-2017-01"
-  certificate_arn   = aws_acm_certificate_validation.main.certificate_arn
-  
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.backend.arn
   }
 }
 
-# S3 Bucket for ALB Logs
-resource "aws_s3_bucket" "alb_logs" {
-  bucket        = "${var.project_name}-alb-logs-${random_id.bucket_suffix.hex}"
-  force_destroy = true
-  
-  tags = {
-    Name = "${var.project_name}-alb-logs"
-  }
-}
+resource "aws_ecs_task_definition" "backend" {
+  family                   = "${var.project_name}-backend"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = var.task_cpu
+  memory                   = var.task_memory
+  execution_role_arn       = aws_iam_role.execution.arn
+  task_role_arn            = aws_iam_role.task.arn
 
-resource "aws_s3_bucket_policy" "alb_logs" {
-  bucket = aws_s3_bucket.alb_logs.id
-  
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          AWS = "arn:aws:iam::${data.aws_elb_service_account.main.id}:root"
-        }
-        Action   = "s3:PutObject"
-        Resource = "${aws_s3_bucket.alb_logs.arn}/alb/AWSLogs/${data.aws_caller_identity.current.account_id}/*"
-      },
-      {
-        Effect = "Allow"
-        Principal = {
-          Service = "delivery.logs.amazonaws.com"
-        }
-        Action   = "s3:PutObject"
-        Resource = "${aws_s3_bucket.alb_logs.arn}/alb/AWSLogs/${data.aws_caller_identity.current.account_id}/*"
-        Condition = {
-          StringEquals = {
-            "s3:x-amz-acl" = "bucket-owner-full-control"
-          }
-        }
-      },
-      {
-        Effect = "Allow"
-        Principal = {
-          Service = "delivery.logs.amazonaws.com"
-        }
-        Action   = "s3:GetBucketAcl"
-        Resource = aws_s3_bucket.alb_logs.arn
-      }
+  container_definitions = jsonencode([{
+    name      = "backend"
+    image     = "${aws_ecr_repository.backend.repository_url}:${var.image_tag}"
+    essential = true
+    portMappings = [{
+      containerPort = var.container_port
+      hostPort      = var.container_port
+      protocol      = "tcp"
+    }]
+    environment = [
+      { name = "APP_ENV", value = var.environment },
+      { name = "AWS_REGION", value = var.aws_region },
+      { name = "BEDROCK_REGION", value = var.aws_region },
+      { name = "BEDROCK_MODEL_ID", value = var.bedrock_model_id },
+      { name = "LLM_PROVIDER", value = "bedrock" },
+      { name = "REDIS_ENABLED", value = "false" },
+      { name = "DB_SSL", value = "true" },
+      { name = "DB_HOST", value = aws_db_instance.postgres.address },
+      { name = "DB_PORT", value = tostring(aws_db_instance.postgres.port) },
+      { name = "DB_NAME", value = var.db_name },
+      { name = "DB_USER", value = var.db_username },
+      { name = "CORS_ALLOWED_ORIGINS", value = "*" }
     ]
-  })
-}
-
-resource "aws_s3_bucket_server_side_encryption_configuration" "alb_logs" {
-  bucket = aws_s3_bucket.alb_logs.id
-  
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+    secrets = [
+      { name = "DB_PASSWORD", valueFrom = "${aws_db_instance.postgres.master_user_secret[0].secret_arn}:password::" },
+      { name = "SECRET_KEY", valueFrom = "${aws_secretsmanager_secret.app.arn}:SECRET_KEY::" },
+      { name = "MASTER_ENCRYPTION_KEY", valueFrom = "${aws_secretsmanager_secret.app.arn}:MASTER_ENCRYPTION_KEY::" }
+    ]
+    healthCheck = {
+      command     = ["CMD-SHELL", "curl -f http://localhost:${var.container_port}/health || exit 1"]
+      interval    = 30
+      timeout     = 5
+      retries     = 3
+      startPeriod = 20
     }
-  }
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "alb_logs" {
-  bucket = aws_s3_bucket.alb_logs.id
-  
-  rule {
-    id     = "delete_old_logs"
-    status = "Enabled"
-    
-    expiration {
-      days = 90
+    logConfiguration = {
+      logDriver = "awslogs"
+      options = {
+        "awslogs-group"         = aws_cloudwatch_log_group.backend.name
+        "awslogs-region"        = var.aws_region
+        "awslogs-stream-prefix" = "ecs"
+      }
     }
+  }])
+}
+
+resource "aws_ecs_service" "backend" {
+  name            = "${var.project_name}-backend"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.backend.arn
+  desired_count   = var.desired_count
+  launch_type     = "FARGATE"
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
   }
-}
 
-# S3 Bucket for Application Uploads
-resource "aws_s3_bucket" "uploads" {
-  bucket        = "${var.project_name}-uploads-${random_id.bucket_suffix.hex}"
-  force_destroy = false
-  
-  tags = {
-    Name = "${var.project_name}-uploads"
+  network_configuration {
+    subnets          = aws_subnet.public[*].id
+    security_groups  = [aws_security_group.ecs.id]
+    assign_public_ip = true
   }
-}
 
-resource "aws_s3_bucket_server_side_encryption_configuration" "uploads" {
-  bucket = aws_s3_bucket.uploads.id
-  
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
+  load_balancer {
+    target_group_arn = aws_lb_target_group.backend.arn
+    container_name   = "backend"
+    container_port   = var.container_port
   }
-}
 
-resource "aws_s3_bucket_versioning" "uploads" {
-  bucket = aws_s3_bucket.uploads.id
-  
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
-  bucket = aws_s3_bucket.uploads.id
-  
-  rule {
-    id     = "cleanup_old_versions"
-    status = "Enabled"
-    
-    noncurrent_version_expiration {
-      noncurrent_days = 30
-    }
-  }
-}
-
-# Random ID for bucket naming
-resource "random_id" "bucket_suffix" {
-  byte_length = 4
-}
-
-# Data source for ELB service account
-data "aws_elb_service_account" "main" {}
-
-# Outputs
-output "ecs_cluster_name" {
-  description = "ECS cluster name"
-  value       = aws_ecs_cluster.main.name
-}
-
-output "ecr_repository_url" {
-  description = "ECR repository URL"
-  value       = aws_ecr_repository.backend.repository_url
-}
-
-output "alb_dns_name" {
-  description = "ALB DNS name"
-  value       = aws_lb.main.dns_name
-}
-
-output "alb_zone_id" {
-  description = "ALB zone ID"
-  value       = aws_lb.main.zone_id
+  depends_on = [aws_lb_listener.http, aws_iam_role_policy.execution_secrets]
 }

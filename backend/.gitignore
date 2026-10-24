@@ -45,6 +45,8 @@ coverage.xml
 
 # Alembic
 alembic/versions/*.py
+# The active schema's reviewed baseline migration is source-controlled.
+!alembic/versions/0001_initial_single_user_schema.py
 !alembic/versions/.gitkeep
 
 # Logs

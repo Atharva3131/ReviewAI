@@ -1,0 +1,107 @@
+name: Build and push ReviewAI backend to ECR
+
+on:
+  workflow_dispatch:
+    inputs:
+      aws_region:
+        description: AWS region
+        required: false
+        default: us-east-1
+        type: string
+      aws_role_arn:
+        description: IAM role ARN trusted by GitHub Actions OIDC
+        required: false
+        type: string
+      ecr_repository:
+        description: Existing ECR repository name
+        required: false
+        default: reviewai-staging-backend
+        type: string
+      image_tag:
+        description: Image tag to push
+        required: false
+        default: bootstrap
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ${{ inputs.aws_region || vars.AWS_REGION || 'us-east-1' }}
+  AWS_ROLE_ARN: ${{ inputs.aws_role_arn || vars.AWS_ROLE_ARN }}
+  ECR_REPOSITORY: ${{ inputs.ecr_repository || vars.ECR_REPOSITORY || 'reviewai-staging-backend' }}
+  IMAGE_TAG: ${{ inputs.image_tag || vars.IMAGE_TAG || 'bootstrap' }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Preflight configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${AWS_ROLE_ARN}" ]]; then
+            echo "::error::AWS IAM role ARN is missing. Supply the aws_role_arn workflow input or set the AWS_ROLE_ARN repository variable."
+            exit 1
+          fi
+
+          if [[ ! "${AWS_ROLE_ARN}" =~ ^arn:aws:iam::[0-9]{12}:role/.+ ]]; then
+            echo "::error::AWS_ROLE_ARN is not a valid IAM role ARN."
+            exit 1
+          fi
+
+          if [[ -z "${ECR_REPOSITORY}" ]]; then
+            echo "::error::ECR repository name is missing. Supply the ecr_repository workflow input or set the ECR_REPOSITORY repository variable."
+            exit 1
+          fi
+
+          if [[ -z "${IMAGE_TAG}" ]]; then
+            echo "::error::Image tag is missing. Supply the image_tag workflow input or set the IMAGE_TAG repository variable."
+            exit 1
+          fi
+
+          if [[ ! -f backend/Dockerfile ]]; then
+            echo "::error::backend/Dockerfile was not found."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials with GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          role-session-name: reviewai-github-actions-${{ github.run_id }}
+
+      - name: Verify AWS identity and ECR access
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws sts get-caller-identity >/dev/null || {
+            echo "::error::The configured IAM role could not be assumed or STS identity verification failed."
+            exit 1
+          }
+
+          aws ecr describe-repositories \
+            --repository-names "${ECR_REPOSITORY}" \
+            --region "${AWS_REGION}" >/dev/null || {
+            echo "::error::ECR repository '${ECR_REPOSITORY}' is missing or the assumed role cannot access it in ${AWS_REGION}."
+            exit 1
+          }
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}

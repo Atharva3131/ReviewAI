@@ -1,269 +1,220 @@
-# Revive AI - AI-Powered Customer Recovery Platform
+# Revive AI
 
-Revive AI is a comprehensive SaaS platform that helps businesses monitor public reviews, analyze customer conversations, predict churn risks, and take automated recovery actions to improve ratings, retention, and revenue.
+### Turn customer feedback into customer recovery
 
-## ✨ Features
+Revive AI is an AI-powered customer recovery platform for teams that want to understand public reviews, identify churn risk, and take the right recovery action before a dissatisfied customer is lost.
 
-- **Review Intelligence Engine**: Automated sentiment analysis, urgency classification, and issue categorization
-- **Customer Recovery Agent**: Predictive churn risk assessment and automated recovery action generation
-- **Agent Orchestration**: Intelligent decision-making for routing customer issues
-- **LLM Integration**: Multi-provider AI integration (Mistral AI, OpenAI, Gemini) for response generation
-- **Background Processing**: Scalable task queue system for asynchronous operations
-- **Security**: Comprehensive security features including CSRF protection, rate limiting, and SQL injection prevention
+It combines review intelligence, customer-risk prediction, agent orchestration, and response generation in one multi-tenant SaaS application.
 
-## 🛠️ Technology Stack
+![Revive AI platform](https://img.shields.io/badge/status-active%20development-22c55e?style=for-the-badge)
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-14-000000?style=for-the-badge&logo=next.js&logoColor=white)
+![AWS](https://img.shields.io/badge/AWS-Terraform-FF9900?style=for-the-badge&logo=amazon-aws&logoColor=white)
+
+## What it does
+
+- **Review intelligence** — sentiment analysis, urgency detection, issue categorization, and suggested responses.
+- **Customer recovery** — churn-risk scoring, bad-review likelihood assessment, and recommended recovery actions.
+- **Agent orchestration** — combines rules, confidence scores, and LLM reasoning to choose the next best action.
+- **Multi-tenant operations** — organization isolation, role-based access, audit trails, and privacy tooling.
+- **Operational visibility** — health checks, request metrics, rate limiting, structured logging, and optional Sentry error tracking.
+- **Billing-ready product** — Stripe integration for subscription and checkout workflows.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    User[Customer success team] --> Web[Next.js frontend]
+    Web --> ALB[AWS Application Load Balancer]
+    ALB --> ECS[AWS ECS Fargate\nFastAPI backend]
+    ECS --> RDS[(Amazon RDS\nPostgreSQL 15)]
+    ECS --> Bedrock[Amazon Bedrock\nClaude model]
+    ECS --> Redis[(Redis\noptional for local/dev)]
+    ECS --> Secrets[AWS Secrets Manager]
+    ECS --> Logs[CloudWatch Logs & Alarms]
+    ECR[Amazon ECR] --> ECS
+    TF[Terraform] -. provisions .-> ALB
+    TF -. provisions .-> ECS
+    TF -. provisions .-> RDS
+    TF -. provisions .-> ECR
+```
+
+## Cloud and platform services
+
+### AWS — production infrastructure
+
+Terraform in [`aws/terraform`](aws/terraform) provisions the current backend deployment:
+
+| Service | Purpose |
+| --- | --- |
+| **Amazon ECS on Fargate** | Runs the containerized FastAPI backend without managing servers |
+| **Amazon ECR** | Stores scanned backend container images with lifecycle cleanup |
+| **Amazon RDS for PostgreSQL 15** | Managed, encrypted application database in private subnets |
+| **Amazon Bedrock** | LLM inference; the Terraform default is Anthropic Claude 3 Haiku |
+| **AWS Secrets Manager** | Stores application and RDS credentials injected into ECS |
+| **Application Load Balancer** | Public HTTP entry point and ECS health-check routing |
+| **Amazon VPC** | Public/private subnets, route tables, internet gateway, and security groups |
+| **AWS IAM** | Separate ECS execution and task roles with least-purpose permissions |
+| **Amazon CloudWatch** | ECS log groups plus CPU and ALB 5xx alarms |
+| **Amazon S3** | Optional remote Terraform state; bootstrap instructions are in the deployment runbook |
+
+### Application and external integrations
+
+| Service | Use |
+| --- | --- |
+| **Redis** | Cache, rate limiting, sessions, metrics, and Celery broker/result backend; configurable for local or managed Redis |
+| **OpenAI, Google Gemini, Mistral AI** | Optional alternative LLM providers supported by the application |
+| **Stripe** | Payments and subscription checkout |
+| **SendGrid** | Optional email delivery |
+| **Sentry** | Optional application error tracking |
+
+> The current Terraform ECS task uses **Amazon Bedrock** and sets `REDIS_ENABLED=false`. Redis remains available for local development and alternate deployments. The Terraform stack deploys the backend only; the frontend needs its own hosting setup.
+
+## Technology stack
+
+- **Frontend:** Next.js 14, React 18, TypeScript, Tailwind CSS, Radix UI, Recharts
+- **Backend:** FastAPI, Python, SQLAlchemy, Pydantic, async PostgreSQL, Alembic
+- **AI/ML:** Amazon Bedrock, OpenAI, Gemini, Mistral, XGBoost, LightGBM, scikit-learn, pgvector
+- **Async work:** Celery with Redis
+- **Infrastructure:** Docker, AWS, Terraform 1.5+, AWS provider 5.x
+- **Quality:** pytest, Jest, Playwright, axe, Black, isort, Flake8, Bandit
+
+## Repository layout
+
+```text
+.
+├── backend/                 # FastAPI API, services, models, migrations, and tests
+├── frontend/                # Next.js dashboard and customer-facing UI
+├── aws/terraform/           # AWS infrastructure as code
+├── scripts/                 # Local, staging, production, and rollback scripts
+├── database/                # Database initialization assets
+├── AWS_MANUAL_DEPLOYMENT.md # Step-by-step AWS deployment runbook
+├── DEMO_SETUP.md            # Demo environment setup
+└── ARCHITECTURE_INTERVIEW_PREP.md
+```
+
+## Run locally
+
+### Prerequisites
+
+- Python 3.11+
+- Node.js 18+
+- PostgreSQL 15+ (with pgvector if vector features are enabled)
+- Redis 7+ for caching, rate limiting, and background tasks
+- API credentials for the LLM provider you want to use
 
 ### Backend
-- **Framework**: FastAPI (Python 3.13)
-- **Database**: PostgreSQL (via Supabase)
-- **Cache**: Redis (via Upstash)
-- **AI/LLM**: Mistral AI (primary), OpenAI, Google Gemini
-- **Task Queue**: Celery
-- **ORM**: SQLAlchemy
-- **Migrations**: Alembic
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate       # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env
+
+# Edit .env, then run migrations and start the API
+alembic upgrade head
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
 
 ### Frontend
-- **Framework**: Next.js 14 (React)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **State Management**: React Context + Hooks
-- **API Client**: Axios
 
-## 📋 Prerequisites
-
-- Python 3.13.5 or higher
-- Node.js 24.12.0 or higher
-- PostgreSQL database (Supabase free tier recommended)
-- Redis instance (Upstash free tier recommended)
-- Mistral AI API key
-
-## 🔧 Installation
-
-### 1. Clone the Repository
 ```bash
-git clone <repository-url>
-cd AI_REVIEW_AGENT
-```
-
-### 2. Backend Setup
-```powershell
-cd backend
-
-# Create virtual environment
-python -m venv venv
-
-# Activate virtual environment
-venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Generate SECRET_KEY
-python generate_secret_key.py
-
-# Configure environment variables
-# Edit backend/.env with your credentials
-
-# Run database migrations
-alembic upgrade head
-
-# Start the backend server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-### 3. Frontend Setup
-```powershell
 cd frontend
-
-# Install dependencies
 npm install
-
-# Start the development server
+cp .env.example .env.local
 npm run dev
 ```
 
-## 🔑 Configuration
+Open [http://localhost:3000](http://localhost:3000) for the dashboard. The API is available at [http://localhost:8000](http://localhost:8000), with Swagger at [`/docs`](http://localhost:8000/docs) and ReDoc at [`/redoc`](http://localhost:8000/redoc).
 
-### Required Environment Variables
+## Configuration
 
-Create a `backend/.env` file with the following:
+The backend template is [`backend/.env.example`](backend/.env.example), and the frontend template is [`frontend/.env.example`](frontend/.env.example).
+
+At minimum, configure:
 
 ```env
-# Database (Supabase)
-DATABASE_URL=postgresql://postgres:password@db.xxx.supabase.co:5432/postgres
-
-# Redis (Upstash)
-REDIS_URL=redis://default:password@xxx.upstash.io:6379
-
-# Security
-SECRET_KEY=your-generated-secret-key-here
-
-# Mistral AI
-MISTRAL_API_KEY=your-mistral-api-key-here
-
-# Background Tasks
-CELERY_BROKER_URL=redis://default:password@xxx.upstash.io:6379
-CELERY_RESULT_BACKEND=redis://default:password@xxx.upstash.io:6379
-
-# Development
-DEBUG=true
-LOG_LEVEL=INFO
-ENVIRONMENT=development
+DATABASE_URL=postgresql://user:password@localhost:5432/revive_ai
+REDIS_URL=redis://localhost:6379
+SECRET_KEY=generate-a-long-random-secret
+DEFAULT_LLM_PROVIDER=bedrock
+BEDROCK_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
+BEDROCK_REGION=us-east-1
 ```
 
-### Getting API Keys
+For local non-AWS development, set `DEFAULT_LLM_PROVIDER` to `openai`, `mistral`, or `gemini` and provide the matching API key. Never commit credentials, `.env` files, Terraform state, or production variable files containing secrets.
 
-1. **Mistral AI**: https://console.mistral.ai/
-2. **Supabase**: https://supabase.com
-3. **Upstash**: https://upstash.com
+## Deploy with Terraform and AWS
 
-See [SETUP_GUIDE.md](SETUP_GUIDE.md) for detailed instructions.
+The supported AWS deployment path is documented in [`AWS_MANUAL_DEPLOYMENT.md`](AWS_MANUAL_DEPLOYMENT.md). It covers state bootstrapping, ECR image publishing, Terraform validation, RDS migrations, ECS rollout, and health checks.
 
-## 🌐 Access Points
+Quick outline:
 
-Once running:
+```bash
+# Prerequisites: AWS CLI, Terraform >= 1.5, Docker, Python, and psql
+aws sts get-caller-identity
 
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:8000
-- **API Documentation**: http://localhost:8000/docs
-- **Health Check**: http://localhost:8000/api/v1/health
+cd aws/terraform
+terraform init
+terraform fmt -check -recursive
+terraform validate
 
-## 📚 Documentation
+# Review values first; never put secrets in *.tfvars files
+terraform plan -var-file=staging.tfvars -out=reviewai.tfplan
+terraform apply reviewai.tfplan
+```
 
-- [Setup Guide](SETUP_GUIDE.md) - Complete setup instructions
-- [Quick Reference](QUICK_REFERENCE.md) - Command reference and troubleshooting
-- [API Documentation](http://localhost:8000/docs) - Interactive API docs (when running)
-- [Security Audit Report](SECURITY_AUDIT_REPORT.md) - Security assessment
-- [Project Summary](PROJECT_SUMMARY.md) - Complete project overview
+The first deployment must create and push the backend image to ECR before ECS can start it. For the complete bootstrap sequence, use the runbook rather than applying the abbreviated commands above blindly.
 
-## 🧪 Testing
+Useful deployment assets:
 
-### Backend Tests
-```powershell
+- [`aws/terraform`](aws/terraform) — VPC, ECS, ECR, RDS, Bedrock permissions, secrets, and monitoring
+- [`scripts/`](scripts) — deployment, rollout, monitoring, and rollback helpers
+- [`aws/ecs-task-definition.json`](aws/ecs-task-definition.json) — standalone ECS task-definition reference
+- [`aws/THIRD_PARTY_LICENSES`](aws/THIRD_PARTY_LICENSES) — AWS CLI bundle license information
+
+## Testing and quality checks
+
+```bash
+# Backend
 cd backend
-venv\Scripts\activate
 pytest
+pytest --cov=app --cov-report=html
 
-# With coverage
-pytest --cov=app tests/
-
-# Security tests
-pytest tests/security/
-```
-
-### Frontend Tests
-```powershell
+# Frontend
 cd frontend
+npm run type-check
 npm test
-
-# With coverage
-npm test -- --coverage
+npm run test:e2e
 ```
 
-## 🏗️ Project Structure
+Repository-wide checks are also available through [`scripts/quality-check-all.sh`](scripts/quality-check-all.sh) and [`scripts/quality-check-all.ps1`](scripts/quality-check-all.ps1).
 
-```
-AI_REVIEW_AGENT/
-├── backend/              # FastAPI backend
-│   ├── app/
-│   │   ├── api/         # API endpoints
-│   │   ├── core/        # Core configuration
-│   │   ├── models/      # Database models
-│   │   ├── schemas/     # Pydantic schemas
-│   │   └── services/    # Business logic
-│   ├── alembic/         # Database migrations
-│   ├── tests/           # Backend tests
-│   └── requirements.txt # Python dependencies
-├── frontend/            # Next.js frontend
-│   ├── src/
-│   │   ├── app/        # Next.js app router
-│   │   ├── components/ # React components
-│   │   └── lib/        # Utilities
-│   └── package.json    # Node dependencies
-├── docs/               # Documentation
-└── .kiro/              # Kiro specs
-```
+## Documentation
 
-## 🔒 Security
+- [AWS deployment runbook](AWS_MANUAL_DEPLOYMENT.md)
+- [Demo setup](DEMO_SETUP.md)
+- [Backend API documentation](backend/docs/API_DOCUMENTATION.md)
+- [API quick reference](backend/docs/QUICK_REFERENCE.md)
+- [cURL examples](backend/docs/API_DOCUMENTATION_CURL.md)
+- [Backend guide](backend/README.md)
+- [Deployment scripts guide](scripts/README.md)
+- [Architecture interview preparation](ARCHITECTURE_INTERVIEW_PREP.md)
 
-Revive AI implements comprehensive security measures:
+## Security notes
 
-- JWT-based authentication
-- CSRF protection
-- SQL injection prevention
-- XSS protection
-- Rate limiting
-- Input validation and sanitization
-- Secure password hashing (bcrypt)
-- Security headers (HSTS, CSP, etc.)
+Revive AI includes JWT authentication, password hashing, CSRF and XSS protections, input validation, SQL-injection defenses, security headers, rate limiting, encrypted RDS storage, private database subnets, and secrets injection through AWS Secrets Manager.
 
-See [SECURITY_AUDIT_REPORT.md](SECURITY_AUDIT_REPORT.md) for details.
+Before production traffic:
 
-## 🚀 Deployment
+- use HTTPS with a certificate and a domain in front of the load balancer;
+- restrict CORS to trusted frontend origins;
+- review IAM and security-group rules;
+- enable durable Terraform remote state and state locking;
+- run migrations from a private, controlled network path;
+- rotate application and provider credentials regularly.
 
-### Backend Deployment
-- Recommended: AWS ECS with Fargate
-- Database: Supabase (managed PostgreSQL)
-- Cache: Upstash (managed Redis)
-- See `aws/` directory for Terraform configurations
+## License
 
-### Frontend Deployment
-- Recommended: Vercel or AWS CloudFront + S3
-- Environment variables must be configured in deployment platform
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests
-5. Submit a pull request
-
-## 📝 License
-
-Proprietary License - All rights reserved
-
-## 🆘 Support
-
-For issues or questions:
-1. Check the [SETUP_GUIDE.md](SETUP_GUIDE.md)
-2. Review [QUICK_REFERENCE.md](QUICK_REFERENCE.md)
-3. Check existing documentation in `/docs`
-4. Contact support team
-
-## 🎯 Development Status
-
-- ✅ Backend API - Complete
-- ✅ Frontend UI - Complete
-- ✅ Authentication - Complete
-- ✅ Review Intelligence - Complete
-- ✅ Customer Recovery - Complete
-- ✅ LLM Integration - Complete (Mistral AI)
-- ✅ Security Audit - Complete
-- 🚧 Production Deployment - In Progress
-
-## 📊 System Requirements
-
-### Minimum
-- 4GB RAM
-- 2 CPU cores
-- 10GB disk space
-
-### Recommended
-- 8GB RAM
-- 4 CPU cores
-- 20GB disk space
-- SSD storage
-
-## 🌟 Key Highlights
-
-- **AI-Powered**: Uses Mistral AI for intelligent response generation
-- **Scalable**: Built with async/await and background task processing
-- **Secure**: A- security rating with comprehensive protection
-- **Modern Stack**: Latest versions of FastAPI, Next.js, and Python 3.13
-- **Cloud-Ready**: Designed for cloud deployment with Terraform configs
-- **Well-Tested**: Comprehensive test suite with 50+ security tests
-
----
-
-**Ready to get started?** Follow the [SETUP_GUIDE.md](SETUP_GUIDE.md) to set up your development environment!
+Proprietary — all rights reserved.
